@@ -1,0 +1,101 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100;300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: 15, 23, 42;
+    --accent: 245, 158, 11;
+    --background: 248, 250, 252;
+  }
+
+  body {
+    @apply bg-[#F8FAFC] text-[#0F172A] font-['Outfit',_sans-serif] antialiased overflow-x-hidden;
+  }
+
+  /* Custom selection color */
+  ::selection {
+    @apply bg-blue-500/20 text-blue-900;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-[#FFFFFF] border border-[#E2E8F0] text-[#0F172A] rounded-[32px] transition-all;
+  }
+
+  .glass-card:hover {
+    @apply border-slate-200 shadow-[0_20px_60px_rgba(0,0,0,0.04)] -translate-y-0.5;
+  }
+
+  .premium-shadow {
+    @apply shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05),0_10px_30px_-2px_rgba(0,0,0,0.03)];
+  }
+
+  .input-field {
+    @apply w-full px-5 py-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl text-sm font-medium focus:border-[#F59E0B] outline-none transition-all placeholder:text-[#0F172A]/50 text-[#0F172A];
+  }
+
+  /* Sophisticated Table Utilities */
+  .crm-table-container {
+    @apply bg-[#F8FAFC] rounded-[32px] border border-[#E2E8F0] overflow-hidden;
+  }
+
+  /* Custom badge utility */
+  .badge-premium {
+    @apply px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border;
+  }
+}
+
+/* Custom Scrollbar Engine */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+}
+
+/* Sophisticated Motion Suite */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulseBlue {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-in {
+  animation: slideInRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-pulse-blue {
+  animation: pulseBlue 2s infinite;
+}
+
+/* Custom transitions */
+.transition-premium {
+  @apply transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)];
+}
+
+/* Monospace for data points */
+.font-mono-data {
+  font-family: 'JetBrains Mono', monospace;
+}
