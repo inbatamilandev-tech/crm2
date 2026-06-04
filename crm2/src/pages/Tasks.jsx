@@ -4,17 +4,18 @@ import {
   Trash2, CheckCircle2, ListTodo, MoreHorizontal,
   ChevronRight, Activity, PhoneCall, Mail, FileText, CheckSquare,
   Settings, Zap, List, LayoutGrid, Check, Play, Edit3,
-  Video, Users, Loader2, Timer, ArrowRight, History
+  Video, Users, Loader2, Timer, ArrowRight, History, Search, ExternalLink
 } from 'lucide-react';
 import { tasksApi, leadsApi, dealsApi, meetingsApi } from '../services/api';
 
 import { useToast } from '../context/ToastContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useAuth } from '../context/AuthContext';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 import MeetingSchedulerModal from '../components/MeetingSchedulerModal';
 
 dayjs.extend(relativeTime);
@@ -58,12 +59,14 @@ export default function Tasks() {
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState('Current Tasks');
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const [isAutomationModalOpen, setIsAutomationModalOpen] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState([]);
   const [layout, setLayout] = useState('list');
   const [autoMode, setAutoMode] = useState(true);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerLogs, setDrawerLogs] = useState([]);
@@ -77,6 +80,14 @@ export default function Tasks() {
   const lastProcessedMessageRef = useRef(null);
   const abortControllerRef = useRef(null);
   const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -139,6 +150,16 @@ export default function Tasks() {
   
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: '', due_date: '', priority: 'medium', status: 'not_started', description: '', task_type: 'todo' });
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
+
+  // Handle /new route
+  useEffect(() => {
+    if (location.pathname.endsWith('/new')) {
+      setNewTask({ title: '', due_date: '', priority: 'medium', status: 'not_started', description: '', task_type: 'todo' });
+      setIsCreateModalOpen(true);
+      navigate('/tasks', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const { addToast } = useToast();
   const { lastMessage } = useWebSocket();
@@ -384,9 +405,9 @@ export default function Tasks() {
         start_time: meetingData.meeting_start,
         end_time: meetingData.meeting_end,
         notes: meetingData.notes,
-        meeting_type: meetingData.metadata.meeting_type === 'discovery' ? 'Video Call' : 'In Person', 
-        object_id: meetingData.lead,
-        participants: [selectedTask.owner || 'Sales Rep', meetingData.title.split(': ').pop() || 'Lead'],
+        meeting_type: meetingData.metadata?.meeting_type === 'discovery' ? 'Video Call' : 'In Person', 
+        object_id: meetingData.lead || null,
+        participants: [selectedTask?.owner || 'Sales Rep', meetingData.title.split(': ').pop() || 'Lead'],
       });
 
       // 2. Update the current task with scheduling info instead of creating a new one
@@ -484,29 +505,36 @@ export default function Tasks() {
   const handleDelete = async (id) => {
     const strId = String(id);
     if (isTaskLoading(strId)) return;
-    if (!window.confirm("Are you sure you'd like to remove this task?")) return;
     
-    const originalTask = tasks.find(t => String(t.id) === strId);
-    // Optimistic removal (safe ID comparison)
-    setTasks(prev => prev.filter(t => String(t.id) !== strId));
-    if (selectedTask && String(selectedTask.id) === strId) setIsDrawerOpen(false);
+    setDialogConfig({
+      isOpen: true,
+      title: "Remove Task",
+      description: "Are you sure you'd like to remove this task? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        const originalTask = tasks.find(t => String(t.id) === strId);
+        // Optimistic removal (safe ID comparison)
+        setTasks(prev => prev.filter(t => String(t.id) !== strId));
+        if (selectedTask && String(selectedTask.id) === strId) setIsDrawerOpen(false);
 
-    addLoadingTask(strId);
-    try {
-      await tasksApi.delete(id);
-      if (!isMountedRef.current) return;
-      addToast("Task removed successfully", "success");
-      // Clean up selection if needed
-      setSelectedTasks(prev => prev.filter(tid => String(tid) !== strId));
-    } catch (err) {
-      if (!isMountedRef.current) return;
-      // Rollback
-      if (originalTask) setTasks(prev => [...prev, originalTask]);
-      if (selectedTask && String(selectedTask.id) === strId) setIsDrawerOpen(true);
-      addToast("Failed to remove the task", "error");
-    } finally {
-      if (isMountedRef.current) removeLoadingTask(strId);
-    }
+        addLoadingTask(strId);
+        try {
+          await tasksApi.delete(id);
+          if (!isMountedRef.current) return;
+          addToast("Task removed successfully", "success");
+          // Clean up selection if needed
+          setSelectedTasks(prev => prev.filter(tid => String(tid) !== strId));
+        } catch (err) {
+          if (!isMountedRef.current) return;
+          // Rollback
+          if (originalTask) setTasks(prev => [...prev, originalTask]);
+          if (selectedTask && String(selectedTask.id) === strId) setIsDrawerOpen(true);
+          addToast("Failed to remove the task", "error");
+        } finally {
+          if (isMountedRef.current) removeLoadingTask(strId);
+        }
+      }
+    });
   };
 
   const toggleTaskSelection = (taskId) => {
@@ -528,32 +556,39 @@ export default function Tasks() {
 
   const handleBulkDelete = async () => {
     if (!selectedTasks.length || isProcessing) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedTasks.length} tasks?`)) return;
     
-    setIsProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
+    setDialogConfig({
+      isOpen: true,
+      title: "Bulk Delete Tasks",
+      description: `Are you sure you want to delete ${selectedTasks.length} tasks? This action cannot be undone.`,
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        setIsProcessing(true);
+        let successCount = 0;
+        let failCount = 0;
 
-    try {
-      const results = await Promise.allSettled(selectedTasks.map(id => tasksApi.delete(id)));
-      results.forEach(res => {
-        if (res.status === 'fulfilled') successCount++;
-        else failCount++;
-      });
+        try {
+          const results = await Promise.allSettled(selectedTasks.map(id => tasksApi.delete(id)));
+          results.forEach(res => {
+            if (res.status === 'fulfilled') successCount++;
+            else failCount++;
+          });
 
-      if (failCount === 0) {
-        addToast(`Successfully deleted ${successCount} tasks`, "success");
-      } else {
-        addToast(`${successCount} deleted, ${failCount} failed`, failCount > 0 ? "warning" : "success");
+          if (failCount === 0) {
+            addToast(`Successfully deleted ${successCount} tasks`, "success");
+          } else {
+            addToast(`${successCount} deleted, ${failCount} failed`, failCount > 0 ? "warning" : "success");
+          }
+          
+          setSelectedTasks([]);
+          fetchTasks();
+        } catch (err) {
+          addToast("Bulk delete operation failed", "error");
+        } finally {
+          setIsProcessing(false);
+        }
       }
-      
-      setSelectedTasks([]);
-      fetchTasks();
-    } catch (err) {
-      addToast("Bulk delete operation failed", "error");
-    } finally {
-      setIsProcessing(false);
-    }
+    });
   };
 
   const handleBulkStatusUpdate = async (status) => {
@@ -622,12 +657,19 @@ export default function Tasks() {
       if (view === 'Today Tasks') return task.due_date && dayjs(task.due_date).isSame(dayjs(), 'day');
       if (view === 'Current Tasks') return true; // Show all active
       return true;
+    }).filter(task => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        (task.title || '').toLowerCase().includes(q) ||
+        (task.related_name || '').toLowerCase().includes(q)
+      );
     }).sort((a, b) => {
       if (!a.due_date) return 1;
       if (!b.due_date) return -1;
       return dayjs(a.due_date).valueOf() - dayjs(b.due_date).valueOf();
     });
-  }, [tasks, view, layout]);
+  }, [tasks, view, layout, timerRunning, selectedTask, searchQuery]);
 
   const getPriorityBadge = (prio) => {
     switch(prio) {
@@ -747,6 +789,16 @@ export default function Tasks() {
                 </button>
               </div>
             )}
+            <div className="relative group mr-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-200 rounded-md text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-48 transition-all shadow-sm"
+              />
+            </div>
             <div className="flex items-center space-x-2 mr-4 border-r border-slate-200 pr-4">
               <span className="text-sm font-medium text-slate-600">Auto Mode</span>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -787,7 +839,7 @@ export default function Tasks() {
           </div>
         </div>
 
-        {/* Task List/Board Area */}
+        {/* Task List/Board Area — this div is the ONLY scroll container for the table */}
         <div className="flex-1 overflow-auto bg-slate-50/50">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
@@ -800,10 +852,8 @@ export default function Tasks() {
               <p className="text-sm mt-1">You're completely up to date! Brilliant.</p>
             </div>
           ) : layout === 'list' ? (
-            <div className="min-w-full inline-block align-middle">
-              <div className="border-b border-slate-200 shadow-sm">
-                <table className="min-w-full divide-y divide-slate-200">
-                  <thead className="bg-slate-50 sticky top-0 z-10">
+            <table className="min-w-full divide-y divide-slate-200 relative">
+                  <thead className="bg-slate-50 sticky top-0 z-20 shadow-sm">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-10">
                         <input 
@@ -897,9 +947,7 @@ export default function Tasks() {
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
-            </div>
+            </table>
           ) : (
             <div className="h-full flex overflow-x-auto p-6 space-x-6">
               <DragDropContext onDragEnd={onDragEnd}>
@@ -1093,7 +1141,7 @@ export default function Tasks() {
                   <Activity className="w-4 h-4 mr-1.5 text-blue-500" /> Sales Lifecycle
                 </p>
                 <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-200 uppercase tracking-tight">
-                  {selectedTask.stage || selectedTask.lead_status || 'In Progress'}
+                  {(selectedTask.stage === 'won' || selectedTask.lead_status === 'won') ? 'success' : (selectedTask.stage || selectedTask.lead_status || 'In Progress')}
                 </span>
               </div>
               <div className="flex items-center justify-between relative px-2">
@@ -1105,7 +1153,7 @@ export default function Tasks() {
                   { name: 'Meeting', status: 'meeting' },
                   { name: 'Qualified', status: 'qualified' },
                   { name: 'Proposal', status: 'proposal' },
-                  { name: 'Closed', status: 'won' },
+                  { name: 'Closed', status: 'successfully closed' },
                 ].map((step, index) => {
                   const leadStatus = selectedTask.lead_status || 'new';
                   const taskType = selectedTask.task_type;
@@ -1339,10 +1387,10 @@ export default function Tasks() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-indigo-900 group-hover:text-blue-700">{selectedTask.related_name}</p>
-                      <p className="text-xs text-indigo-700/70 capitalize">{selectedTask.stage || 'Connected Entity'}</p>
+                      <p className="text-xs text-indigo-700/70 capitalize">{(selectedTask.stage === 'won' || selectedTask.lead_status === 'won') ? 'success' : (selectedTask.stage || selectedTask.lead_status || 'Connected Entity')}</p>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-indigo-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                  <ExternalLink className="w-5 h-5 text-indigo-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
                 </div>
               </div>
             )}
@@ -1486,19 +1534,19 @@ export default function Tasks() {
       
       {/* Create Deal Modal (After Meeting Success) */}
       {isDealModalOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="fixed inset-0 z-[110] flex items-start justify-center bg-slate-900/40 backdrop-blur-sm animate-fade-in p-4 pt-24 pb-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-full flex flex-col animate-in zoom-in-95 duration-300 overflow-hidden">
+            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
               <div>
                 <h2 className="text-xl font-black text-slate-900">Create Deal</h2>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Record deal details to move to Proposal</p>
               </div>
-              <button onClick={() => setIsDealModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all border border-slate-100">
+              <button type="button" onClick={() => setIsDealModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-white text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all border border-slate-100 shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
-            <form onSubmit={handleCreateDeal} className="p-8 space-y-5">
+            <form onSubmit={handleCreateDeal} className="p-8 space-y-5 overflow-y-auto flex-1">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Deal Name *</label>
                 <input 
@@ -1797,7 +1845,7 @@ export default function Tasks() {
                 { val: 'Identify Decision Makers',    label: 'Identify Decision Makers',    icon: '👥', color: 'violet', desc: 'Update deal to Identify Decision Makers' },
                 { val: 'Proposal/Price Quote',        label: 'Proposal/Price Quote',        icon: '📄', color: 'purple', desc: 'Update deal to Proposal/Price Quote' },
                 { val: 'Negotiation/Review',          label: 'Negotiation/Review',          icon: '🤝', color: 'amber',  desc: 'Update deal to Negotiation/Review' },
-                { val: 'Closed Won',                  label: 'Closed Won',                  icon: '🎉', color: 'emerald',desc: 'Mark Lead Won \u0026 Deal Closed Won' },
+                { val: 'successfully closed',         label: 'Successfully Closed',         icon: '🎉', color: 'emerald',desc: 'Mark Lead Successfully \u0026 Deal Successfully Closed' },
                 { val: 'Closed Lost',                 label: 'Closed Lost',                 icon: '❌', color: 'rose',   desc: 'Mark Lead Lost \u0026 Deal Closed Lost' },
                 { val: 'Closed Lost to Competition',    label: 'Closed Lost to Competition',       icon: '🏳️', color: 'red',    desc: 'Mark Lost to Competition' },
               ].map(opt => (
@@ -1828,6 +1876,15 @@ export default function Tasks() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

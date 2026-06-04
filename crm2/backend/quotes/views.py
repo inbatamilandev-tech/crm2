@@ -3,19 +3,20 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Quote
 from .serializers import QuoteSerializer
-from users.permissions import RoleBasedAccessPermission, has_perm
+from users.permissions import HasModulePermission, has_perm
 from invoices.models import Invoice, InvoiceLineItem
 
 
 class QuoteViewSet(viewsets.ModelViewSet):
     """
     RBAC rules:
-      admin   → all quotes
-      manager → quotes owned by users in same team
-      sales   → only their own quotes
+      global scope → all quotes
+      team scope   → quotes owned by users in same team
+      own scope    → only their own quotes
     """
     serializer_class = QuoteSerializer
-    permission_classes = [RoleBasedAccessPermission]
+    permission_classes = [HasModulePermission]
+    rbac_module = 'quote'
     filterset_fields = ['status']
     search_fields = ['quote_number', 'deal__title']
     ordering_fields = ['created_at', 'valid_until', 'amount']
@@ -24,19 +25,20 @@ class QuoteViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Quote.objects.none()
+        if not user.role:
+            return Quote.objects.none()
 
         base_qs = Quote.objects.select_related('owner', 'deal', 'deal__contact')
+        scope = user.role.data_scope
 
-        if user.role == 'admin':
+        if scope == 'global':
             return base_qs.all()
-        if user.role == 'manager':
+        if scope == 'team':
             if not user.team:
                 return base_qs.none()
             return base_qs.filter(owner__team=user.team)
-        if user.role == 'sales':
-            return base_qs.filter(owner=user)
-
-        return base_qs.none()
+        # 'own' scope
+        return base_qs.filter(owner=user)
 
     def perform_create(self, serializer):
         """Always stamp the creating user as owner."""
@@ -85,9 +87,6 @@ class QuoteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[has_perm('quote.approve')])
     def approve(self, request, pk=None):
         quote = self.get_object()
-            
-        if quote.status != 'sent':
-            return Response({'error': 'Only sent quotes can be approved.'}, status=status.HTTP_400_BAD_REQUEST)
             
         quote.status = 'accepted'
         quote.save()

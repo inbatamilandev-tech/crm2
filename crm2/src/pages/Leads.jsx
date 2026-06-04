@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import Table from '../components/Table';
 import CollaborationHub from '../components/CollaborationHub';
 import { leadsApi, contactsApi, dealsApi, activitiesApi, tasksApi, callsApi, meetingsApi } from '../services/api';
@@ -10,9 +11,9 @@ import {
   MoreHorizontal, Mail, Phone, Building2, UserPlus, ChevronRight,
   Megaphone, Info, Send, Clock, FileText, Activity, Briefcase,
   CheckCircle2, XCircle, ChevronLeft, ExternalLink, Paperclip,
-  Timer, ArrowRight
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 import { useWebSocket } from '../context/WebSocketContext';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -543,6 +544,7 @@ function LeadDetailView({ lead, onBack, onEdit, onDelete, onConvert, onStatusCha
                           <option value="contacted">Contacted</option>
                           <option value="qualified">Qualified</option>
                           <option value="lost">Lost</option>
+                          <option value="won">Success</option>
                         </select>
                       </div>
                       <InfoRow label="Source" value={lead.source || '—'} />
@@ -568,7 +570,7 @@ function LeadDetailView({ lead, onBack, onEdit, onDelete, onConvert, onStatusCha
                           <InfoRow label="Phone"      value={lead.phone} isPhone />
                           <InfoRow label="Email"      value={lead.email} isLink />
                           <InfoRow label="Created"    value={new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} />
-                          <InfoRow label="Status"     value={lead.status?.toUpperCase()} />
+                          <InfoRow label="Status"     value={lead.status?.toUpperCase() === 'WON' ? 'SUCCESS' : lead.status?.toUpperCase()} />
                         </div>
                       </div>
                     </div>
@@ -703,10 +705,10 @@ function LeadDetailView({ lead, onBack, onEdit, onDelete, onConvert, onStatusCha
                       <p className="text-[12px] text-[#0F172A]/70">{d.stage} · ${parseFloat(d.value).toLocaleString()}</p>
                     </div>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                      d.stage === 'Closed Won' ? 'bg-emerald-50 text-emerald-600' :
+                      (d.stage === 'Closed Won' || d.stage === 'Successfully Closed') ? 'bg-emerald-50 text-emerald-600' :
                       d.stage?.startsWith('Closed') ? 'bg-rose-50 text-rose-600' :
                       'bg-[#0F172A]/10 text-[#0F172A]'
-                    }`}>{d.stage}</span>
+                    }`}>{d.stage === 'Closed Won' ? 'SUCCESS' : d.stage === 'Successfully Closed' ? 'SUCCESS' : d.stage}</span>
                   </div>
                 ))
               }
@@ -998,6 +1000,10 @@ export default function Leads() {
     setCurrentPage 
   } = usePagination(fetchLeadsWithSort);
 
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [leads, setLeads] = useState([]);
   const { lastMessage } = useWebSocket();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1014,6 +1020,7 @@ export default function Leads() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
   
   // Debounce search query
   useEffect(() => {
@@ -1071,51 +1078,63 @@ export default function Leads() {
     fetchConversionRate();
   }, [fetchLeads, fetchConversionRate]);
 
-  // Deep linking logic
+  // Deep linking and browser navigation logic
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const leadId = params.get('id');
-    if (leadId && !viewingLead) {
+    const leadId = searchParams.get('id');
+    
+    // If URL has no ID but we are viewing a lead, user clicked browser Back
+    if (!leadId && viewingLead) {
+      setViewingLead(null);
+    } 
+    // If URL has an ID but we aren't viewing it (deep link, refresh, or browser Forward)
+    else if (leadId && (!viewingLead || viewingLead.id.toString() !== leadId)) {
       const fetchDeepLinkedLead = async () => {
         try {
           const lead = await leadsApi.getById(leadId);
           setViewingLead(lead);
         } catch (err) {
           console.error("Failed to fetch deep-linked lead", err);
-          // Optional: clear param if lead not found
+          // Clean up URL if lead not found
+          setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            newParams.delete('id');
+            return newParams;
+          });
         }
       };
       fetchDeepLinkedLead();
     }
-  }, [viewingLead]);
+  }, [searchParams, viewingLead, setSearchParams]);
 
-  // Sync URL with viewing state
+  // Handle /new route
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (viewingLead) {
-      if (params.get('id') !== viewingLead.id.toString()) {
-        params.set('id', viewingLead.id);
-        window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
-      }
-    } else {
-      if (params.has('id')) {
-        params.delete('id');
-        window.history.pushState({}, '', `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`);
-      }
+    if (location.pathname.endsWith('/new')) {
+      setSelectedLead(null);
+      setFormData({ name: '', email: '', company: '', phone: '', source: 'website', status: 'new' });
+      setIsModalOpen(true);
+      // Clean up URL so refresh doesn't reopen modal
+      navigate('/leads', { replace: true });
     }
-  }, [viewingLead]);
+  }, [location.pathname, navigate]);
 
   // ─── CRUD Handlers ───────────────────────────────────────────────────────────
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this lead?')) return;
-    try {
-      await leadsApi.delete(id);
-      addToast('Lead deleted successfully');
-      fetchLeads();
-    } catch (err) {
-      addToast('Failed to delete lead', 'error');
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Lead",
+      description: "Are you sure you want to delete this lead? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await leadsApi.delete(id);
+          addToast('Lead deleted successfully');
+          fetchLeads();
+        } catch (err) {
+          addToast('Failed to delete lead', 'error');
+        }
+      }
+    });
   };
 
   const handleAddOrEditLead = async (e) => {
@@ -1223,6 +1242,7 @@ export default function Leads() {
       case 'qualified': return 'bg-blue-50 text-blue-600 border-blue-100';
       case 'lost':      return 'bg-rose-50 text-rose-600 border-rose-100';
       case 'converted': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+      case 'won':       return 'bg-emerald-50 text-emerald-600 border-emerald-100';
       default:          return 'bg-slate-50 text-slate-600 border-slate-100';
     }
   };
@@ -1285,10 +1305,11 @@ export default function Leads() {
       accessor: 'status',
       render: (row) => {
         const isConverted = row.status?.toLowerCase() === 'qualified' && row.contact;
+        const displayStatus = row.status?.toLowerCase() === 'won' ? 'Success' : (row.status || 'New');
         return (
           <div className="flex items-center space-x-2">
             <span className={`px-2.5 py-1 inline-flex text-[10px] font-bold rounded-lg capitalize border shadow-sm ${getStatusStyles(row.status)}`}>
-              {row.status || 'New'}
+              {displayStatus}
             </span>
             {isConverted && (
               <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded text-[9px] font-bold uppercase tracking-tight">
@@ -1315,7 +1336,14 @@ export default function Leads() {
       render: (row) => (
         <div className="flex justify-end space-x-1">
           <button
-            onClick={() => setViewingLead(row)}
+            onClick={() => {
+              setViewingLead(row);
+              setSearchParams(prev => {
+                const newParams = new URLSearchParams(prev);
+                newParams.set('id', row.id);
+                return newParams;
+              });
+            }}
             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
             title="View Lead"
           >
@@ -1374,7 +1402,15 @@ export default function Leads() {
           </div>
           
           <button
-            onClick={() => { setConversionSuccess(null); setViewingLead(null); }}
+            onClick={() => { 
+              setConversionSuccess(null); 
+              setViewingLead(null); 
+              setSearchParams(prev => {
+                const newParams = new URLSearchParams(prev);
+                newParams.delete('id');
+                return newParams;
+              });
+            }}
             className="mt-6 px-4 py-1.5 bg-white border border-blue-600 text-blue-600 rounded text-[14px] hover:bg-blue-50 transition-colors"
           >
             Go to Leads
@@ -1451,7 +1487,7 @@ export default function Leads() {
                           <option value="Value Proposition">Value Proposition</option>
                           <option value="Identify Decision Makers">Identify Decision Makers</option>
                           <option value="Negotiation/Review">Negotiation/Review</option>
-                          <option value="Closed Won">Closed Won</option>
+                          <option value="Closed Won">Success</option>
                           <option value="Closed Lost">Closed Lost</option>
                           <option value="Closed Lost to Competition">Closed Lost to Competition</option>
                         </select>
@@ -1540,9 +1576,24 @@ export default function Leads() {
     return (
       <LeadDetailView
         lead={viewingLead}
-        onBack={() => setViewingLead(null)}
+        onBack={() => {
+          setViewingLead(null);
+          setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            newParams.delete('id');
+            return newParams;
+          });
+        }}
         onEdit={() => openEditModal(viewingLead)}
-        onDelete={() => { handleDelete(viewingLead.id); setViewingLead(null); }}
+        onDelete={() => { 
+          handleDelete(viewingLead.id); 
+          setViewingLead(null); 
+          setSearchParams(prev => {
+            const newParams = new URLSearchParams(prev);
+            newParams.delete('id');
+            return newParams;
+          });
+        }}
         onConvert={() => setConvertingLead(true)}
         onStatusChange={async (newStatus) => {
           setViewingLead({ ...viewingLead, status: newStatus });
@@ -1664,7 +1715,7 @@ export default function Leads() {
       </div>
 
       {/* Table Container */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden min-h-[500px] relative">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden relative">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-20">
             <div className="relative">
@@ -1705,8 +1756,33 @@ export default function Leads() {
           </div>
         ) : null}
 
-        <div className="overflow-x-auto">
-          <Table columns={columns} data={filteredLeads} />
+        <div className="overflow-auto max-h-[400px] relative">
+          <table className="min-w-full divide-y divide-[#0F172A]/20">
+            <thead className="bg-[#0F172A] sticky top-0 z-20">
+              <tr>
+                {columns.map((col, idx) => (
+                  <th
+                    key={idx}
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-black text-[#F8FAFC] uppercase tracking-wider"
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-[#F8FAFC] divide-y divide-[#0F172A]/20">
+              {filteredLeads.map((row, rowIndex) => (
+                <tr key={rowIndex} className="hover:bg-[#0F172A]/20 transition-colors">
+                  {columns.map((col, colIndex) => (
+                    <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-[#0F172A] font-medium">
+                      {col.render ? col.render(row) : row[col.accessor]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         <Pagination
@@ -1721,7 +1797,7 @@ export default function Leads() {
 
       {/* Premium Add / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-10 pb-10 overflow-y-auto">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={() => setIsModalOpen(false)} />
           <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-xl overflow-hidden relative z-10 animate-in zoom-in-95 duration-300">
             <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
@@ -1798,6 +1874,15 @@ export default function Leads() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

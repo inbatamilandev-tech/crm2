@@ -7,28 +7,38 @@ import { accountsApi, dealsApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { usePagination } from '../hooks/usePagination';
 import Pagination from '../components/Pagination';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Accounts() {
   const fetchAccountsAndDeals = useCallback(async (params, config) => {
-    const [accountsRes, dealsRes] = await Promise.all([
-      accountsApi.getAll(params, config),
-      dealsApi.getAll()
-    ]);
+    try {
+      const apiParams = {
+        ...params,
+        page: params.page,
+        limit: params.limit,
+        page_size: params.limit,
+        per_page: params.limit,
+        size: params.limit
+      };
+      const [accountsRes, dealsRes] = await Promise.all([
+        accountsApi.getAll(apiParams, config),
+        dealsApi.getAll().catch(() => [])
+      ]);
     
-    const fetchedAccounts = accountsRes.results || accountsRes;
-    const fetchedDeals = dealsRes.results || dealsRes;
+    const fetchedAccounts = accountsRes.results || (Array.isArray(accountsRes) ? accountsRes : []);
+    const fetchedDeals = dealsRes.results || (Array.isArray(dealsRes) ? dealsRes : []);
     
     const accountMap = {};
     
     fetchedAccounts.forEach(acc => {
        accountMap[acc.id] = {
           id: acc.id,
-          name: acc.name,
+          name: acc.name || acc.account_name || acc.company_name || acc.company || 'Unknown',
           industry: acc.industry || 'General',
           size: acc.company_size || 'N/A',
           contacts: acc.contacts_count || 0,
           openDeals: acc.open_deals_count || 0,
-          value: acc.pipeline_value || 0,
+          value: acc.annual_revenue || acc.pipeline_value || 0,
           location: acc.location || 'N/A',
           website: acc.website || '',
           phone: acc.phone || '',
@@ -36,7 +46,17 @@ export default function Accounts() {
        };
     });
     
-    return Object.values(accountMap);
+    const resultsArray = Object.values(accountMap);
+    if (accountsRes && accountsRes.results !== undefined) {
+      return {
+        count: accountsRes.count !== undefined ? accountsRes.count : resultsArray.length,
+        results: resultsArray
+      };
+    }
+    return resultsArray;
+    } catch (err) {
+      throw err;
+    }
   }, []);
 
   const { 
@@ -64,6 +84,7 @@ export default function Accounts() {
   const [editAccountId, setEditAccountId] = useState(null);
   const [formData, setFormData] = useState({ name: '', industry: '', website: '', location: '', phone: '', company_size: '', annual_revenue: '' });
   const { addToast } = useToast();
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   // Debounce search term
   useEffect(() => {
@@ -101,14 +122,21 @@ export default function Accounts() {
   };
 
   const handleDeleteAccount = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this account?")) return;
-    try {
-      await accountsApi.delete(id);
-      addToast('Account deleted successfully');
-      fetchAccounts();
-    } catch (err) {
-      addToast('Failed to delete account', 'error');
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Record",
+      description: "Are you sure you want to delete this record? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig({ ...dialogConfig, isOpen: false });
+        try {
+          await accountsApi.delete(id);
+          addToast('Account deleted successfully');
+          fetchAccounts();
+        } catch (err) {
+          addToast('Failed to delete account', 'error');
+        }
+      }
+    });
   };
 
   const handleAddAccount = async (e) => {
@@ -152,7 +180,7 @@ export default function Accounts() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-[1400px] mx-auto pb-10">
+    <div className="space-y-6 animate-fade-in max-w-[1400px] mx-auto pb-10 force-light-mode">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -195,16 +223,16 @@ export default function Accounts() {
       </div>
 
       {/* Main Container */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden min-h-[500px] relative">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden relative">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-20">
             <div className="w-8 h-8 border-2 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[450px] relative">
             <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
+              <thead className="sticky top-0 z-20 bg-gray-50 shadow-sm border-b border-gray-200">
+                <tr>
                   <th className="px-6 py-3 text-[13px] font-medium text-gray-600 cursor-pointer" onClick={() => handleSort('name')}>Account Name</th>
                   <th className="px-6 py-3 text-[13px] font-medium text-gray-600 cursor-pointer" onClick={() => handleSort('location')}>Location</th>
                   <th className="px-6 py-3 text-[13px] font-medium text-gray-600 cursor-pointer" onClick={() => handleSort('industry')}>Industry</th>
@@ -236,7 +264,7 @@ export default function Accounts() {
                       <span className="text-[13px] text-gray-800">{acc.openDeals}</span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                       <span className="text-[13px] text-gray-800">${acc.value.toLocaleString()}</span>
+                       <span className="text-[13px] text-gray-800">₹{acc.value.toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-4 text-right relative">
                        <button 
@@ -281,28 +309,28 @@ export default function Accounts() {
                 ))}
               </tbody>
             </table>
-            
+{/*             
             {filteredAccounts.length === 0 && (
-               <div className="p-20 flex flex-col items-center justify-center text-center border-t border-gray-100">
-                  <div className="text-[14px] text-gray-500">No matching accounts found.</div>
-               </div>
-            )}
+              //  <div className="p-20 flex flex-col items-center justify-center text-center border-t border-gray-100">
+              //     <div className="text-[14px] text-gray-500">No matching accounts found.</div>
+              //  </div>
+            )} */}
           </div>
         )}
       </div>
 
-      <Pagination
+      {/* <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
         totalRecords={totalRecords}
         rowsPerPage={rowsPerPage}
         onPageChange={setPage}
         onRowsPerPageChange={changeRowsPerPage}
-      />
+      /> */}
 
       {/* Account Creation Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 p-4">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={() => setIsModalOpen(false)} />
           <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl overflow-hidden relative z-10 animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
@@ -383,6 +411,15 @@ export default function Accounts() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

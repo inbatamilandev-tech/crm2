@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Activity, CheckCircle2, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-react';
 import { workflowsApi, workflowLogsApi } from '../../../services/api';
+import ConfirmationDialog from '../../../components/ConfirmationDialog';
 
 export default function WorkflowLogs() {
   const { id } = useParams();
@@ -10,6 +11,7 @@ export default function WorkflowLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedLogId, setExpandedLogId] = useState(null);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     fetchData();
@@ -18,12 +20,22 @@ export default function WorkflowLogs() {
   const handleRetry = async (logId) => {
     try {
       await workflowLogsApi.retry(logId);
-      alert("Retry execution initiated. It will run in the background.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Retry Initiated",
+        description: "Retry execution initiated. It will run in the background.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
       // optionally refresh logs after a delay
       setTimeout(fetchData, 2000);
     } catch (error) {
       console.error("Failed to retry", error);
-      alert("Failed to initiate retry.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: "Failed to initiate retry.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     }
   };
 
@@ -177,6 +189,14 @@ export default function WorkflowLogs() {
         )}
       </div>
 
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

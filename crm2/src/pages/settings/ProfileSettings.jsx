@@ -3,6 +3,7 @@ import { Upload, Save } from 'lucide-react';
 import { authService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { INPUT_STYLE } from '../../utils/themeUtils';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function ProfileSettings() {
   const { user, setUser: setGlobalUser } = useAuth();
@@ -13,6 +14,7 @@ export default function ProfileSettings() {
     phone: user?.phone || '',
     bio: user?.bio || '',
   });
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     if (user) {
@@ -34,10 +36,20 @@ export default function ProfileSettings() {
     try {
       const updatedUser = await authService.updateProfile(formData);
       setGlobalUser(updatedUser);
-      alert("Profile updated successfully!");
+      setDialogConfig({
+        isOpen: true,
+        title: "Success",
+        description: "Profile updated successfully!",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } catch (error) {
       console.error("Failed to update profile", error);
-      alert("Failed to update profile.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: "Failed to update profile.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     }
   };
 
@@ -49,10 +61,20 @@ export default function ProfileSettings() {
       const response = await authService.uploadAvatar(file);
       const updatedUser = response.data || response;
       setGlobalUser(updatedUser);
-      alert("Avatar updated successfully!");
+      setDialogConfig({
+        isOpen: true,
+        title: "Success",
+        description: "Avatar updated successfully!",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } catch (error) {
       console.error("Failed to upload avatar", error);
-      alert("Failed to upload avatar.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: "Failed to upload avatar.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     }
   };
 
@@ -129,6 +151,15 @@ export default function ProfileSettings() {
         </div>
 
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

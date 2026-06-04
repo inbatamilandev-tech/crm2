@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
 import { Save, Percent, FileText, Plus, Trash2 } from 'lucide-react';
 import { INPUT_STYLE } from '../../utils/themeUtils';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function FinancePreferences() {
   const [activeTab, setActiveTab] = useState('taxes');
-  const [taxes, setTaxes] = useState([
-    { id: 1, name: 'State Tax', rate: 5 },
-    { id: 2, name: 'VAT', rate: 20 },
-  ]);
-  const [invoice, setInvoice] = useState({ prefix: 'INV-', defaultTerms: 'Net 30', currency: 'USD' });
+  const [taxes, setTaxes] = useState(() => {
+    const saved = localStorage.getItem('finance_taxes');
+    return saved ? JSON.parse(saved) : [
+      { id: 1, name: 'State Tax', rate: 5 },
+      { id: 2, name: 'VAT', rate: 20 },
+    ];
+  });
+  const [invoice, setInvoice] = useState(() => {
+    const saved = localStorage.getItem('finance_invoice');
+    return saved ? JSON.parse(saved) : { prefix: 'INV-', defaultTerms: 'Net 30', currency: 'USD' };
+  });
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const addTax = () => {
     const newId = Math.max(0, ...taxes.map(t => t.id)) + 1;
@@ -21,11 +29,22 @@ export default function FinancePreferences() {
     setTaxes(taxes.map(t => t.id === id ? { ...t, [field]: value } : t));
   };
 
+  const handleSave = () => {
+    localStorage.setItem('finance_taxes', JSON.stringify(taxes));
+    localStorage.setItem('finance_invoice', JSON.stringify(invoice));
+    setDialogConfig({
+      isOpen: true,
+      title: "Success",
+      description: "Finance preferences saved successfully!",
+      onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-black uppercase tracking-wider text-[#095D95] dark:text-[#50B1B9]">Finance Preferences</h2>
-        <button className="flex items-center px-4 py-2 bg-[#095D95] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-[#074773] transition-colors shadow-lg shadow-[#095D95]/20">
+        <button onClick={handleSave} className="flex items-center px-4 py-2 bg-[#095D95] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-[#074773] transition-colors shadow-lg shadow-[#095D95]/20">
           <Save className="w-4 h-4 mr-2" />
           Save Changes
         </button>
@@ -125,6 +144,7 @@ export default function FinancePreferences() {
                     <option value="USD">USD ($)</option>
                     <option value="EUR">EUR (€)</option>
                     <option value="GBP">GBP (£)</option>
+                    <option value="INR">INR (₹)</option>
                   </select>
                 </div>
 
@@ -147,6 +167,15 @@ export default function FinancePreferences() {
           
         </div>
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

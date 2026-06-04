@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { securityApi, auditLogsApi } from '../../services/api';
 import { Shield, Lock, Key, Clock, ShieldAlert, CheckCircle2, AlertTriangle, Users, Monitor, MousePointer2 } from 'lucide-react';
 import { INPUT_STYLE } from '../../utils/themeUtils';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function SecuritySettings() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -24,6 +25,7 @@ export default function SecuritySettings() {
   const [suspiciousLogs, setSuspiciousLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     fetchData();
@@ -63,10 +65,20 @@ export default function SecuritySettings() {
     try {
       setSaving(true);
       await securityApi.updatePolicy(policy);
-      alert("Security policy updated successfully!");
+      setDialogConfig({
+        isOpen: true,
+        title: "Success",
+        description: "Security policy updated successfully!",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } catch (error) {
       console.error("Failed to update security policy", error);
-      alert("Failed to update security policy.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: "Failed to update security policy.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } finally {
       setSaving(false);
     }
@@ -319,6 +331,15 @@ export default function SecuritySettings() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

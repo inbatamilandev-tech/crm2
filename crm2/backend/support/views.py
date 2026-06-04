@@ -134,9 +134,42 @@ class ServiceViewSet(viewsets.ModelViewSet):
     queryset = Service.objects.all().order_by('-created_at')
     serializer_class = ServiceSerializer
 
+    def perform_create(self, serializer):
+        service = serializer.save()
+        from users.models import Notification
+        Notification.objects.create(
+            user=self.request.user,
+            title='New Service Created',
+            message=f'Service "{service.name}" has been successfully created.',
+            type='success'
+        )
+
 class FeedbackViewSet(viewsets.ModelViewSet):
     queryset = Feedback.objects.all().order_by('-created_at')
     serializer_class = FeedbackSerializer
+
+    def perform_create(self, serializer):
+        feedback = serializer.save()
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            from users.models import Notification
+            from users.serializers import NotificationSerializer
+            from realtime.bus import emit_notification
+            
+            notification = Notification.objects.create(
+                user=self.request.user,
+                title="New Feedback Submitted",
+                message=f"Feedback for case {feedback.case.case_id if feedback.case else 'Unknown'} was successfully added with {feedback.rating} Stars.",
+                type="success",
+                link="/feedback"
+            )
+            notif_data = NotificationSerializer(notification).data
+            emit_notification(self.request.user.id, notif_data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to emit notification for feedback creation: {e}")
 
 class CaseAttachmentViewSet(viewsets.ModelViewSet):
     queryset = CaseAttachment.objects.all()

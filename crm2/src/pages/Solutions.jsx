@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { solutionsApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Solutions() {
   const { addToast } = useToast();
@@ -22,6 +23,7 @@ export default function Solutions() {
   const [content, setContent] = useState('');
   const [tags, setTags] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const fetchSolutions = () => {
     setLoading(true);
@@ -88,15 +90,22 @@ export default function Solutions() {
   };
 
   const handleDeleteArticle = (id) => {
-    if (!window.confirm('Are you sure you want to delete this article?')) return;
-    solutionsApi.delete(id)
-    .then(() => {
-      fetchSolutions();
-      addToast('Article deleted successfully', 'success');
-    })
-    .catch(err => {
-      console.error("[Solutions] Error in handleDeleteArticle:", err);
-      addToast('Failed to delete article', 'error');
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Article",
+      description: "Are you sure you want to delete this article? This action cannot be undone.",
+      onConfirm: () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        solutionsApi.delete(id)
+        .then(() => {
+          fetchSolutions();
+          addToast('Article deleted successfully', 'success');
+        })
+        .catch(err => {
+          console.error("[Solutions] Error in handleDeleteArticle:", err);
+          addToast('Failed to delete article', 'error');
+        });
+      }
     });
   };
 
@@ -123,7 +132,7 @@ export default function Solutions() {
   return (
     <div className="space-y-8 p-6 bg-slate-50/50 min-h-screen">
       {/* Header Section with Gradient and Glassmorphism */}
-      <div className="relative bg-white/80 backdrop-blur-xl border border-slate-100 rounded-3xl p-8 shadow-sm overflow-hidden">
+      <div className="relative bg-white/80 backdrop-blur-xl border border-slate-100 rounded-3xl p-8 shadow-sm overflow-hidden sticky top-0 z-30">
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/10 rounded-full blur-3xl -z-10 translate-x-1/2 -translate-y-1/2" />
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-400/10 rounded-full blur-3xl -z-10 -translate-x-1/2 translate-y-1/2" />
         
@@ -302,7 +311,7 @@ export default function Solutions() {
               </button>
             </div>
             
-            <div className="p-6 space-y-5">
+            <div className="p-6 space-y-5 overflow-y-auto max-h-[70vh]">
               <div>
                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-2">Title</label>
                 <input 
@@ -505,6 +514,15 @@ export default function Solutions() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

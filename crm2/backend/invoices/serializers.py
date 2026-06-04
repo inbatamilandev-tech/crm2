@@ -29,6 +29,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return None
 
     def get_customer_name(self, obj):
-        if obj.quote and obj.quote.deal and obj.quote.deal.contact:
-            return f"{obj.quote.deal.contact.first_name} {obj.quote.deal.contact.last_name}".strip()
+        if obj.quote and obj.quote.customer_name:
+            return obj.quote.customer_name
         return "N/A"

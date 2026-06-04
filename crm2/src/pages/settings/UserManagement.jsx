@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { usersApi, authService } from '../../services/api';
+import { usersApi, authService, rolesApi } from '../../services/api';
 import { Plus, Edit, Trash2, Loader2, Search, Filter, X, Save } from 'lucide-react';
 import { INPUT_STYLE } from '../../utils/themeUtils';
+import { useToast } from '../../context/ToastContext';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function UserManagement() {
+  const { addToast } = useToast();
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -15,42 +19,70 @@ export default function UserManagement() {
   
   // Form States
   const [newUser, setNewUser] = useState({
-    email: '', username: '', first_name: '', last_name: '', role: 'sales', password: 'Password123!'
+    email: '', username: '', first_name: '', last_name: '', role: '', password: '', confirm_password: ''
   });
   const [editUser, setEditUser] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchUsersAndRoles = async () => {
     setLoading(true);
+    
+    // Fetch users independently
     try {
-      const data = await usersApi.getAll();
-      setUsers(data.results || data);
+      const usersData = await usersApi.getAll();
+      setUsers(usersData.results || usersData);
     } catch (error) {
       console.error("Failed to fetch users", error);
+    }
+
+    // Fetch roles independently with required logging
+    try {
+      const rolesData = await rolesApi.getAll();
+      console.log("Roles API Response:", rolesData);
+      
+      const parsedRoles = rolesData.results || rolesData;
+      console.log("Parsed Roles for Dropdown:", parsedRoles);
+      
+      setRoles(parsedRoles);
+    } catch (error) {
+      console.error("Failed to fetch roles", error);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchUsersAndRoles();
+  }, []);
+
   const handleCreateUser = async () => {
-    if (!newUser.email || !newUser.username || !newUser.first_name || !newUser.last_name) {
-      alert("Please fill out all fields.");
+    if (!newUser.email || !newUser.username || !newUser.first_name || !newUser.last_name || !newUser.password) {
+      addToast("Please fill out all fields.", "error");
+      return;
+    }
+    if (newUser.password !== newUser.confirm_password) {
+      addToast("Passwords do not match.", "error");
       return;
     }
     
     setIsSubmitting(true);
     try {
-      await authService.register(newUser);
+      await authService.register({
+        email: newUser.email,
+        username: newUser.username,
+        first_name: newUser.first_name,
+        last_name: newUser.last_name,
+        role: newUser.role,
+        password: newUser.password
+      });
       setIsAddModalOpen(false);
-      setNewUser({ email: '', username: '', first_name: '', last_name: '', role: 'sales', password: 'Password123!' });
-      fetchUsers(); // Refresh the list
+      setNewUser({ email: '', username: '', first_name: '', last_name: '', role: '', password: '', confirm_password: '' });
+      fetchUsersAndRoles(); // Refresh the list
+      addToast("User created successfully!", "success");
     } catch (error) {
       console.error("Failed to create user", error);
-      alert("Failed to create user. Make sure the username/email is unique.");
+      addToast("Failed to create user. Make sure the username/email is unique.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -63,14 +95,14 @@ export default function UserManagement() {
       username: user.username || '',
       first_name: user.first_name || '',
       last_name: user.last_name || '',
-      role: user.role || 'sales'
+      role: user.role?.id || user.role || ''
     });
     setIsEditModalOpen(true);
   };
 
   const handleUpdateUser = async () => {
     if (!editUser.email || !editUser.first_name || !editUser.last_name) {
-      alert("Please fill out required fields.");
+      addToast("Please fill out required fields.", "error");
       return;
     }
 
@@ -84,25 +116,33 @@ export default function UserManagement() {
       });
       setIsEditModalOpen(false);
       setEditUser(null);
-      fetchUsers(); // Refresh the list
+      fetchUsersAndRoles(); // Refresh the list
+      addToast("User updated successfully!", "success");
     } catch (error) {
       console.error("Failed to update user", error);
-      alert("Failed to update user.");
+      addToast("Failed to update user.", "error");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteUser = async (id) => {
-    if (window.confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
-      try {
-        await usersApi.delete(id);
-        fetchUsers();
-      } catch (error) {
-        console.error("Failed to delete user", error);
-        alert("Failed to delete user.");
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete User",
+      description: "Are you sure you want to delete this user? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await usersApi.delete(id);
+          fetchUsersAndRoles();
+          addToast("User deleted successfully!", "success");
+        } catch (error) {
+          console.error("Failed to delete user", error);
+          addToast("Failed to delete user.", "error");
+        }
       }
-    }
+    });
   };
 
   const filteredUsers = users.filter(u => {
@@ -139,9 +179,9 @@ export default function UserManagement() {
               className={`${INPUT_STYLE} pl-10 !py-2 appearance-none border-slate-300 dark:border-slate-600`}
             >
               <option value="all">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="manager">Manager</option>
-              <option value="sales">Sales Rep</option>
+              {roles.map(r => (
+                <option key={r.id} value={r.name}>{r.name}</option>
+              ))}
             </select>
           </div>
 
@@ -152,14 +192,14 @@ export default function UserManagement() {
         </div>
       </div>
       
-      <div className="bg-white dark:bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-200 dark:border-white/5 relative shadow-sm hover:shadow-md transition-shadow">
+      <div className="bg-white dark:bg-slate-800/50 rounded-2xl overflow-y-auto max-h-[calc(100vh-250px)] border border-slate-200 dark:border-white/5 relative shadow-sm hover:shadow-md transition-shadow">
         {loading && users.length > 0 && (
           <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 flex items-center justify-center z-10 backdrop-blur-sm">
             <Loader2 className="w-6 h-6 animate-spin text-[#095D95]" />
           </div>
         )}
         <table className="w-full text-left text-xs">
-          <thead>
+          <thead className="sticky top-0 z-20 shadow-sm">
             <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
               <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">User</th>
               <th className="px-6 py-4 font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Role</th>
@@ -185,7 +225,9 @@ export default function UserManagement() {
                     <div className="text-slate-500 mt-0.5">{u.email}</div>
                   </div>
                 </td>
-                <td className="px-6 py-4 capitalize font-bold text-slate-700 dark:text-slate-300">{u.role}</td>
+                <td className="px-6 py-4 capitalize font-bold text-slate-700 dark:text-slate-300">
+                  {roles.find(r => r.id === u.role || r.id === u.role?.id)?.name || u.role?.name || u.role}
+                </td>
                 <td className="px-6 py-4">
                   <span className="px-3 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-full font-black text-[10px] uppercase tracking-widest shadow-sm">Active</span>
                 </td>
@@ -208,7 +250,7 @@ export default function UserManagement() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-200 dark:border-white/10 animate-in zoom-in-95">
             <div className="px-6 py-4 border-b border-slate-200 dark:border-white/5 flex justify-between items-center bg-slate-50 dark:bg-white/5">
-              <h3 className="font-black uppercase tracking-widest text-[#095D95] dark:text-[#50B1B9]">Invite New User</h3>
+              <h3 className="font-black uppercase tracking-widest text-[#095D95] dark:text-[#50B1B9]">Create New User</h3>
               <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
@@ -261,10 +303,37 @@ export default function UserManagement() {
                   onChange={(e) => setNewUser({...newUser, role: e.target.value})} 
                   className={INPUT_STYLE}
                 >
-                  <option value="sales">Sales Representative</option>
-                  <option value="manager">Sales Manager</option>
-                  <option value="admin">System Administrator</option>
+                  <option value="" disabled>Select Role</option>
+                  {(!roles || roles.length === 0) ? (
+                    <option value="" disabled>No roles available. Please create a role first.</option>
+                  ) : (
+                    roles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))
+                  )}
                 </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Set Password *</label>
+                  <input 
+                    type="password" 
+                    value={newUser.password} 
+                    onChange={(e) => setNewUser({...newUser, password: e.target.value})} 
+                    placeholder="Enter password"
+                    className={INPUT_STYLE} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Confirm Password *</label>
+                  <input 
+                    type="password" 
+                    value={newUser.confirm_password} 
+                    onChange={(e) => setNewUser({...newUser, confirm_password: e.target.value})} 
+                    placeholder="Confirm password"
+                    className={INPUT_STYLE} 
+                  />
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-slate-200 dark:border-white/5 bg-slate-50 dark:bg-white/5 flex justify-end space-x-3">
@@ -277,7 +346,7 @@ export default function UserManagement() {
                 className="flex items-center px-6 py-2 bg-[#095D95] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-[#074773] transition-colors shadow-lg shadow-[#095D95]/20 disabled:opacity-50"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {isSubmitting ? 'Sending...' : 'Send Invite'}
+                {isSubmitting ? 'Creating...' : 'Create User'}
               </button>
             </div>
           </div>
@@ -340,9 +409,10 @@ export default function UserManagement() {
                   onChange={(e) => setEditUser({...editUser, role: e.target.value})} 
                   className={INPUT_STYLE}
                 >
-                  <option value="sales">Sales Representative</option>
-                  <option value="manager">Sales Manager</option>
-                  <option value="admin">System Administrator</option>
+                  <option value="" disabled>Select Role</option>
+                  {roles.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -362,6 +432,15 @@ export default function UserManagement() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

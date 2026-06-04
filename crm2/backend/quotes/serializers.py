@@ -14,7 +14,7 @@ class QuoteLineItemSerializer(serializers.ModelSerializer):
 class QuoteSerializer(serializers.ModelSerializer):
     owner_full_name = serializers.SerializerMethodField()
     deal_title = serializers.CharField(source='deal.title', read_only=True)
-    customer_name = serializers.SerializerMethodField()
+    contact_email = serializers.SerializerMethodField()
     line_items = QuoteLineItemSerializer(many=True, required=False)
 
     class Meta:
@@ -27,10 +27,10 @@ class QuoteSerializer(serializers.ModelSerializer):
             return obj.owner.get_full_name() or obj.owner.username
         return None
 
-    def get_customer_name(self, obj):
+    def get_contact_email(self, obj):
         if obj.deal and obj.deal.contact:
-            return f"{obj.deal.contact.first_name} {obj.deal.contact.last_name}".strip()
-        return ""
+            return obj.deal.contact.email
+        return None
 
     def create(self, validated_data):
         line_items_data = validated_data.pop('line_items', [])
@@ -55,7 +55,8 @@ class QuoteSerializer(serializers.ModelSerializer):
         quote.subtotal = subtotal
         quote.total_discount = total_discount
         quote.tax_amount = tax_amount
-        quote.amount = subtotal - total_discount + tax_amount
+        if float(quote.amount or 0) == 0:
+            quote.amount = subtotal - total_discount + tax_amount
         quote.save()
         
         return quote
@@ -90,7 +91,8 @@ class QuoteSerializer(serializers.ModelSerializer):
             instance.subtotal = subtotal
             instance.total_discount = total_discount
             instance.tax_amount = tax_amount
-            instance.amount = subtotal - total_discount + tax_amount
+            if float(instance.amount or 0) == 0:
+                instance.amount = subtotal - total_discount + tax_amount
             instance.save()
 
         return instance

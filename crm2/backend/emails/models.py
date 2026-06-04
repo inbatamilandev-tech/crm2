@@ -13,6 +13,8 @@ class Email(models.Model):
         ('clicked', 'Clicked'),
         ('bounced', 'Bounced'),
         ('failed', 'Failed'),
+        ('inbox', 'Inbox'),
+        ('received', 'Received'),
     )
 
     lead = models.ForeignKey(Lead, on_delete=models.SET_NULL, null=True, blank=True, related_name='emails')

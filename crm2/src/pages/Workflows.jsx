@@ -10,6 +10,7 @@ import {
 import WorkflowFormModal from '../components/WorkflowFormModal';
 import WorkflowLogsModal from '../components/WorkflowLogsModal';
 import Table from '../components/Table';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Workflows() {
   const [workflows, setWorkflows] = useState([]);
@@ -21,6 +22,7 @@ export default function Workflows() {
   
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [logsWorkflow, setLogsWorkflow] = useState(null);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const { addToast } = useToast();
 
@@ -51,14 +53,21 @@ export default function Workflows() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Archive and purge this automation protocol?")) return;
-    try {
-      await workflowsApi.delete(id);
-      addToast("Protocol purged");
-      fetchWorkflows();
-    } catch (err) {
-      addToast("Purge failed", "error");
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Archive Protocol",
+      description: "Archive and purge this automation protocol? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await workflowsApi.delete(id);
+          addToast("Protocol purged");
+          fetchWorkflows();
+        } catch (err) {
+          addToast("Purge failed", "error");
+        }
+      }
+    });
   };
 
   const openForm = (workflow = null) => {
@@ -224,6 +233,15 @@ export default function Workflows() {
           onClose={() => setIsLogsOpen(false)} 
         />
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

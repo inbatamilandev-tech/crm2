@@ -23,6 +23,7 @@ class Quote(models.Model):
     )
     deal = models.ForeignKey(Deal, on_delete=models.CASCADE, related_name='quotes')
     quote_number = models.CharField(max_length=50, unique=True)
+    customer_name = models.CharField(max_length=255, blank=True, null=True)
     
     # Financials
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)

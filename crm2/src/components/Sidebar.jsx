@@ -1,73 +1,99 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { tasksApi } from '../services/api';
-import { 
-  Search, ChevronDown, ChevronRight, Inbox, Briefcase, 
-  CalendarDays, Package, LifeBuoy, Puzzle, Wrench, 
+import { usePermission } from '../hooks/usePermission';
+import {
+  Search, ChevronDown, ChevronRight, Inbox, Briefcase,
+  CalendarDays, Package, LifeBuoy, Puzzle, Wrench,
   FolderKanban, MessageSquare, Menu, PanelLeftClose, PanelLeftOpen,
   PieChart, Users, Building2, BarChart3, Settings, Zap,
   LayoutGrid, Activity, ShieldCheck, Database, RefreshCw, Cloud
 } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 
+/**
+ * navigationConfig
+ *
+ * Each top-level item may have:
+ *   permission  — if set, item is hidden unless user has this permission
+ *
+ * Each child item may have:
+ *   permission  — if set, child link is hidden unless user has this permission
+ *
+ * Items / children with no 'permission' field are always visible to
+ * authenticated users (e.g. Dashboard, Settings, Workqueue).
+ */
 const navigationConfig = [
   { name: 'Dashboard', icon: PieChart, href: '/' },
   { name: 'Workqueue', icon: Inbox, badge: '5', highlighted: true, href: '/workqueue' },
-  { 
+  {
     name: 'Sales', icon: Briefcase,
     children: [
-      { name: 'Leads', href: '/leads' },
-      { name: 'Contacts', href: '/contacts' },
-      { name: 'Accounts', href: '/accounts' },
-      { name: 'Deals', href: '/deals' },
+      { name: 'Leads',    href: '/leads',    permission: 'lead.view'    },
+      { name: 'Contacts', href: '/contacts', permission: 'contact.view' },
+      { name: 'Accounts', href: '/accounts'                             },
+      { name: 'Deals',    href: '/deals',    permission: 'deal.view'    },
     ]
   },
   {
     name: 'Activities', icon: CalendarDays,
     children: [
-      { name: 'Tasks', href: '/tasks' },
-      { name: 'Calls', href: '/calls' },
-      { name: 'Emails', href: '/emails' },
-      { name: 'Meetings', href: '/meetings' },
+      { name: 'Tasks',    href: '/tasks',    permission: 'task.view'    },
+      { name: 'Calls',    href: '/calls',    permission: 'call.view'    },
+      { name: 'Emails',   href: '/emails'                               },
+      { name: 'Meetings', href: '/meetings', permission: 'meeting.view' },
     ]
   },
   {
     name: 'Marketing', icon: Zap,
     children: [
-      { name: 'Overview', href: '/marketing' },
-      { name: 'Campaigns', href: '/marketing#campaigns' },
-      { name: 'Lead Capture', href: '/marketing#capture' },
-      { name: 'Ads Analytics', href: '/analytics' },
+      { name: 'Overview',     href: '/marketing'          },
+      { name: 'Campaigns',    href: '/marketing#campaigns'},
+      { name: 'Lead Capture', href: '/marketing#capture'  },
+      { name: 'Ads Analytics',href: '/analytics'          },
     ]
   },
   {
     name: 'Inventory', icon: Package,
     children: [
-      { name: 'Products', href: '/products' },
-      { name: 'Quotes', href: '/quotes' },
-      { name: 'Invoices', href: '/invoices' },
+      { name: 'Products', href: '/products'                               },
+      { name: 'Quotes',   href: '/quotes',   permission: 'quote.view'    },
+      { name: 'Invoices', href: '/invoices', permission: 'invoice.view'  },
     ]
   },
   {
     name: 'Support', icon: LifeBuoy,
     children: [
-      { name: 'Support Dashboard', href: '/support' },
-      { name: 'Cases', href: '/cases' },
-      { name: 'Solutions', href: '/solutions' },
-      { name: 'Services', href: '/services' },
-      { name: 'Feedback', href: '/feedback' },
+      { name: 'Support Dashboard', href: '/support'   },
+      { name: 'Cases',             href: '/cases'     },
+      { name: 'Solutions',         href: '/solutions' },
+      { name: 'Services',          href: '/services'  },
+      { name: 'Feedback',          href: '/feedback'  },
     ]
   },
-  { name: 'Projects', icon: FolderKanban, href: '/projects' },
-  { name: 'Analytics', icon: BarChart3, href: '/analytics' },
-  { name: 'Settings', icon: Wrench, href: '/settings' },
+  { name: 'Projects',  icon: FolderKanban, href: '/projects'  },
+  { name: 'Settings',  icon: Wrench,       href: '/settings'  },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MenuItem — renders a single nav item or a collapsible group
+// ─────────────────────────────────────────────────────────────────────────────
 const MenuItem = ({ item, isCollapsed, setCollapsed }) => {
   const location = useLocation();
+  const { hasPermission } = usePermission();
+
   const hasChildren = item.children && item.children.length > 0;
-  const isChildActive = hasChildren && item.children.some(child => location.pathname === child.href);
+
+  // Filter children the user is allowed to see
+  const visibleChildren = hasChildren
+    ? item.children.filter(child => hasPermission(child.permission))
+    : [];
+
+  const isChildActive = hasChildren && visibleChildren.some(child => location.pathname === child.href);
   const [isExpanded, setIsExpanded] = useState(isChildActive);
+
+  // If this is a group, hide it entirely when no children are visible
+  if (hasChildren && visibleChildren.length === 0) return null;
 
   const toggleExpand = (e) => {
     e.preventDefault();
@@ -79,16 +105,17 @@ const MenuItem = ({ item, isCollapsed, setCollapsed }) => {
     }
   };
 
+  // ── Leaf item (no children) ──────────────────────────────────────────────
   if (!hasChildren) {
     return (
       <NavLink
         to={item.href}
-        className={({ isActive }) => 
+        className={({ isActive }) =>
           `group flex items-center px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] rounded-2xl transition-all mb-1 relative overflow-hidden ${
-            item.highlighted 
-              ? 'bg-[#F59E0B]/10 text-[#F59E0B] hover:bg-[#F59E0B]/20' 
-              : isActive 
-                ? 'bg-[#F59E0B] text-[#F8FAFC] shadow-xl scale-[1.02]' 
+            item.highlighted
+              ? 'bg-[#F59E0B]/10 text-[#F59E0B] hover:bg-[#F59E0B]/20'
+              : isActive
+                ? 'bg-[#F59E0B] text-[#F8FAFC] shadow-xl scale-[1.02]'
                 : 'text-[#F8FAFC]/70 hover:bg-[#0F172A]/20 hover:text-[#F8FAFC]'
           }`
         }
@@ -104,8 +131,6 @@ const MenuItem = ({ item, isCollapsed, setCollapsed }) => {
                   <span className={`ml-2 px-2 py-0.5 rounded-lg text-[9px] font-black ${
                     isNaN(parseInt(item.badge)) ? (item.highlighted ? 'bg-[#F59E0B] text-[#F8FAFC]' : 'bg-[#F8FAFC]/10 text-[#F8FAFC]/50') :
                     parseInt(item.badge) === 0 ? 'hidden' :
-                    parseInt(item.badge) <= 10 ? 'bg-[#F59E0B] text-[#F8FAFC]' :
-                    parseInt(item.badge) <= 50 ? 'bg-[#F59E0B] text-[#F8FAFC]' :
                     'bg-[#F59E0B] text-[#F8FAFC]'
                   }`}>
                     {item.badge}
@@ -122,9 +147,10 @@ const MenuItem = ({ item, isCollapsed, setCollapsed }) => {
     );
   }
 
+  // ── Group item (has children) ────────────────────────────────────────────
   return (
     <div className="flex flex-col">
-      <button 
+      <button
         onClick={toggleExpand}
         className={`group flex items-center justify-between px-4 py-3 text-[11px] font-black uppercase tracking-[0.1em] rounded-2xl transition-all mb-1 ${
           isChildActive ? 'text-[#F8FAFC] bg-[#0F172A]/20' : 'text-[#F8FAFC]/70 hover:bg-[#0F172A]/20 hover:text-[#F8FAFC]'
@@ -143,14 +169,14 @@ const MenuItem = ({ item, isCollapsed, setCollapsed }) => {
       {!isCollapsed && (
         <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[500px] opacity-100 mb-2' : 'max-h-0 opacity-0'}`}>
           <div className="pl-12 pr-2 space-y-1 mt-1">
-            {item.children.map((child) => (
+            {visibleChildren.map((child) => (
               <NavLink
                 key={child.name}
                 to={child.href}
-                className={({ isActive }) => 
+                className={({ isActive }) =>
                   `block px-3 py-2 text-[10px] font-bold uppercase tracking-widest rounded-xl transition-all ${
-                    isActive 
-                      ? 'text-[#F59E0B] bg-[#F59E0B]/5' 
+                    isActive
+                      ? 'text-[#F59E0B] bg-[#F59E0B]/5'
                       : 'text-[#F8FAFC]/50 hover:text-[#F8FAFC] hover:bg-[#0F172A]/10'
                   }`
                 }
@@ -165,11 +191,18 @@ const MenuItem = ({ item, isCollapsed, setCollapsed }) => {
   );
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sidebar
+// ─────────────────────────────────────────────────────────────────────────────
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [taskCount, setTaskCount] = useState(0);
+  const { hasPermission } = usePermission();
 
   useEffect(() => {
+    // Only fetch task count if user can view tasks
+    if (!hasPermission('task.view')) return;
+
     const fetchTaskCount = async () => {
       try {
         const response = await tasksApi.getAll();
@@ -177,7 +210,7 @@ export default function Sidebar() {
         const incompleteTasks = tasks.filter(task => task.status !== 'completed');
         setTaskCount(incompleteTasks.length);
       } catch (error) {
-        console.error("Failed to fetch Workqueue count", error);
+        console.error('Failed to fetch Workqueue count', error);
       }
     };
     fetchTaskCount();
@@ -189,13 +222,13 @@ export default function Sidebar() {
 
   return (
     <div className={`flex flex-col bg-[#0F172A] h-screen transition-all duration-500 z-20 shrink-0 border-r border-[#F8FAFC]/10 relative ${isCollapsed ? 'w-24' : 'w-72'}`}>
-      
+
       {/* Brand Section */}
       <div className={`flex items-center justify-center h-24 shrink-0 relative ${isCollapsed ? 'px-2' : 'px-8'}`}>
-        <img 
-          src={logoImg} 
-          alt="Logo" 
-          className={`transition-all duration-300 ${isCollapsed ? 'w-10 h-10 object-contain' : 'h-16 w-auto'}`} 
+        <img
+          src={logoImg}
+          alt="Logo"
+          className={`transition-all duration-300 ${isCollapsed ? 'w-10 h-10 object-contain' : 'h-16 w-auto'}`}
         />
       </div>
 
@@ -221,7 +254,7 @@ export default function Sidebar() {
               </div>
           </div>
         )}
-        
+
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="flex items-center justify-center w-full py-3 text-[#F8FAFC]/70 hover:text-[#F8FAFC] hover:bg-[#0F172A]/20 rounded-2xl transition-all border border-transparent hover:border-[#F8FAFC]/10"

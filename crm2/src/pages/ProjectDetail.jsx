@@ -316,8 +316,8 @@ export default function ProjectDetail() {
             {viewMode === 'list' && (
               <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left text-slate-500">
-                    <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100">
+                  <table className="w-full text-sm text-left text-slate-500 relative">
+                    <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100 sticky top-0 z-20 shadow-sm">
                       <tr>
                         <th className="px-6 py-4">Task Name</th>
                         <th className="px-6 py-4">Status</th>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { authService } from '../../services/api';
 import { INPUT_STYLE } from '../../utils/themeUtils';
 import { Lock, ShieldCheck, AlertCircle } from 'lucide-react';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function PasswordSettings() {
   const [passwords, setPasswords] = useState({
@@ -10,6 +11,7 @@ export default function PasswordSettings() {
     confirm_password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const handleChange = (e) => {
     setPasswords({ ...passwords, [e.target.name]: e.target.value });
@@ -27,11 +29,21 @@ export default function PasswordSettings() {
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     if (passwords.new_password !== passwords.confirm_password) {
-      alert("Passwords do not match!");
+      setDialogConfig({
+        isOpen: true,
+        title: "Validation Error",
+        description: "Passwords do not match!",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
       return;
     }
     if (passwords.new_password.length < 6) {
-      alert("Password must be at least 6 characters long.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Validation Error",
+        description: "Password must be at least 6 characters long.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
       return;
     }
 
@@ -41,11 +53,21 @@ export default function PasswordSettings() {
         current_password: passwords.current_password,
         new_password: passwords.new_password
       });
-      alert("Password updated successfully!");
+      setDialogConfig({
+        isOpen: true,
+        title: "Success",
+        description: "Password updated successfully!",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
       setPasswords({ current_password: '', new_password: '', confirm_password: '' });
     } catch (error) {
       console.error("Failed to update password", error);
-      alert(error.response?.data?.error || "Failed to update password. Please check your current password.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: error.response?.data?.error || "Failed to update password. Please check your current password.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } finally {
       setLoading(false);
     }
@@ -165,6 +187,15 @@ export default function PasswordSettings() {
         </div>
 
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

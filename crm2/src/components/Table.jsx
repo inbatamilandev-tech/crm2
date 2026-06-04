@@ -4,7 +4,7 @@ export default function Table({ columns, data }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-[#0F172A]/20">
-        <thead className="bg-[#0F172A]">
+        <thead className="bg-[#0F172A] sticky top-0 z-20">
           <tr>
             {columns.map((col, idx) => (
               <th

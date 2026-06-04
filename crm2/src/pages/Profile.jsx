@@ -273,19 +273,7 @@ export default function Profile() {
                     className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl focus:border-blue-500 focus:bg-black transition-all text-sm outline-none text-white"
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Language</label>
-                  <select 
-                    name="language"
-                    value={profile.language}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl focus:border-blue-500 focus:bg-black transition-all text-sm outline-none text-white"
-                  >
-                    <option>English</option>
-                    <option>Spanish</option>
-                    <option>French</option>
-                  </select>
-                </div>
+
                 <div className="sm:col-span-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Bio</label>
                   <textarea 

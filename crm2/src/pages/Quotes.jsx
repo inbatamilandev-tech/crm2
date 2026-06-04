@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import Table from '../components/Table';
-import { quotesApi, dealsApi, invoicesApi, productsApi } from '../services/api';
+import { quotesApi, dealsApi, invoicesApi, productsApi, emailsApi } from '../services/api';
 import { 
   Plus, FileText, Download, Loader2, AlertCircle,
   ClipboardCheck, TrendingUp, DollarSign, Calendar,
@@ -12,9 +13,11 @@ import {
 import { useToast } from '../context/ToastContext';
 import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Quotes() {
   const { can } = useAuth();
+  const navigate = useNavigate();
   const [quotes, setQuotes] = useState([]);
   const [deals, setDeals] = useState([]);
   const [products, setProducts] = useState([]);
@@ -28,6 +31,7 @@ export default function Quotes() {
   const [activeDropdown, setActiveDropdown] = useState(null); // Tracks open actions menu
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [search, setSearch] = useState('');
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
   
   const { addToast } = useToast();
   
@@ -149,6 +153,23 @@ export default function Quotes() {
     setActiveDropdown(null);
   };
 
+  const handleSendEmail = async (quote) => {
+    try {
+      await emailsApi.send({
+        to_email: quote.contact_email || 'client@example.com',
+        subject: `Your Quotation #${quote.quote_number}`,
+        body: `Dear ${quote.customer_name},\n\nPlease find the details of your quotation #${quote.quote_number}. Total amount: ₹${parseFloat(quote.amount).toLocaleString()}.\n\nThank you!`
+      });
+      addToast('Email sent to customer', 'success');
+      // Update status to sent
+      await quotesApi.patch(quote.id, { status: 'sent' });
+      fetchQuotes();
+    } catch (err) {
+      addToast('Failed to send email', 'error');
+    }
+    setActiveDropdown(null);
+  };
+
   const handleDuplicate = async (quote) => {
     try {
       const payload = {
@@ -196,15 +217,22 @@ export default function Quotes() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this quote?')) return;
-    try {
-      await quotesApi.delete(id);
-      addToast('Quote deleted successfully', 'success');
-      fetchQuotes();
-    } catch (err) {
-      addToast('Failed to delete quote', 'error');
-    }
-    setActiveDropdown(null);
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Quote",
+      description: "Are you sure you want to delete this quote? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await quotesApi.delete(id);
+          addToast('Quote deleted successfully', 'success');
+          fetchQuotes();
+        } catch (err) {
+          addToast('Failed to delete quote', 'error');
+        }
+        setActiveDropdown(null);
+      }
+    });
   };
 
   const handleDownloadPDF = (quote) => {
@@ -273,7 +301,6 @@ export default function Quotes() {
       
       const payload = { 
         ...editFormData,
-        amount: totalAmount > 0 ? totalAmount : editFormData.amount
       };
       
       // Fix: DRF fails with empty string for date
@@ -381,7 +408,7 @@ export default function Quotes() {
       header: 'Amount', 
       accessor: 'amount', 
       render: (row) => (
-        <span className="text-sm font-semibold text-[#0F172A]">${parseFloat(row.amount).toLocaleString()}</span>
+        <span className="text-sm font-semibold text-[#0F172A]">₹{parseFloat(row.amount).toLocaleString()}</span>
       )
     },
     { 
@@ -535,7 +562,7 @@ export default function Quotes() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Quote Amount ($) *</label>
+                <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Quote Amount (₹) *</label>
                 <div className="relative">
                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0F172A]/50" />
                    <input type="number" className="w-full pl-9 pr-3 py-2 bg-[#0F172A]/10 border border-[#0F172A]/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
@@ -543,7 +570,11 @@ export default function Quotes() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Customer Name</label>
+                <input type="text" className="w-full px-3 py-2 bg-[#0F172A]/10 border border-[#0F172A]/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10" value={formData.customer_name || ''} onChange={e => setFormData({...formData, customer_name: e.target.value})} placeholder="Enter customer name" />
+              </div>
               <div>
                 <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Valid Until</label>
                 <input type="date" className="w-full px-3 py-2 bg-[#0F172A]/10 border border-[#0F172A]/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10" value={formData.valid_until} onChange={e => setFormData({...formData, valid_until: e.target.value})} />
@@ -640,19 +671,19 @@ export default function Quotes() {
                     <div className="flex justify-between">
                       <span className="text-[#0F172A]/70">Subtotal:</span>
                       <span className="font-semibold text-[#0F172A]">
-                        ${formData.line_items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toLocaleString()}
+                        ₹{formData.line_items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-[#0F172A]/70">Total Discount:</span>
                       <span className="font-semibold text-[#0F172A]">
-                        ${formData.line_items.reduce((sum, item) => sum + (parseFloat(item.discount) || 0), 0).toLocaleString()}
+                        ₹{formData.line_items.reduce((sum, item) => sum + (parseFloat(item.discount) || 0), 0).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between border-t border-[#0F172A]/20 pt-1 font-bold">
                       <span className="text-[#0F172A]">Estimated Total:</span>
                       <span className="text-[#0F172A]">
-                        ${formData.line_items.reduce((sum, item) => {
+                        ₹{formData.line_items.reduce((sum, item) => {
                           const base = item.quantity * item.unit_price;
                           const after_discount = base - (parseFloat(item.discount) || 0);
                           const tax = after_discount * ((parseFloat(item.tax_percent) || 0) / 100);
@@ -674,7 +705,7 @@ export default function Quotes() {
           </form>
         </div>
       ) : (
-        <div className="bg-[#F8FAFC] rounded-2xl border border-[#0F172A]/20 shadow-sm overflow-hidden min-h-[500px]">
+        <div className="bg-[#F8FAFC] rounded-2xl border border-[#0F172A]/20 shadow-sm overflow-hidden min-h-[100px] [&>div.overflow-x-auto]:max-h-[calc(100vh-150px)] [&>div.overflow-x-auto]:overflow-y-auto">
           <div className="px-6 py-4 border-b border-[#0F172A]/5 bg-[#0F172A]/10/30 flex items-center justify-between">
              <h3 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest">Active Proposals</h3>
              <div className="flex items-center space-x-3">
@@ -704,131 +735,142 @@ export default function Quotes() {
 
       {/* Details Drawer */}
       {isDetailsOpen && selectedQuote && (
-        <div className="fixed inset-0 z-[100] flex justify-end">
+        <div className="fixed inset-0 z-[100] flex justify-center items-start pt-10 pb-10">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsDetailsOpen(false)} />
-          <div className="bg-[#F8FAFC] w-full max-w-2xl h-full shadow-2xl relative z-10 overflow-y-auto animate-fade-in">
+          <div className="bg-[#F8FAFC] w-full max-w-2xl max-h-full rounded-2xl shadow-2xl relative z-10 overflow-y-auto animate-fade-in">
             
             {/* Header */}
-            <div className="px-6 py-5 border-b border-[#0F172A]/10 flex items-center justify-between sticky top-0 bg-[#F8FAFC] z-20">
+            <div className="px-4 py-3 border-b border-[#0F172A]/10 flex items-center justify-between sticky top-0 bg-[#F8FAFC] z-20">
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-xl font-bold text-[#0F172A]">Quote #{selectedQuote.quote_number}</span>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${getStatusStyles(selectedQuote.status)}`}>
+                  <span className="text-lg font-bold text-[#0F172A]">Quote #{selectedQuote.quote_number}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${getStatusStyles(selectedQuote.status)}`}>
                     {selectedQuote.status}
                   </span>
                 </div>
-                <p className="text-xs text-[#0F172A]/70 mt-0.5">Created on {dayjs(selectedQuote.created_at).format('MMM D, YYYY')}</p>
+                <p className="text-[10px] text-[#0F172A]/70 mt-0.5">Created on {dayjs(selectedQuote.created_at).format('MMM D, YYYY')}</p>
               </div>
               <div className="flex items-center space-x-2">
                 <button 
                   onClick={() => handleDownloadPDF(selectedQuote)} 
-                  className="p-2 text-[#0F172A]/50 hover:text-[#0F172A] hover:bg-[#0F172A]/10 rounded-lg" 
+                  className="p-1.5 text-[#0F172A]/50 hover:text-[#0F172A] hover:bg-[#0F172A]/10 rounded-lg" 
                   title="Download PDF"
                   disabled={isGeneratingPDF}
                 >
-                  {isGeneratingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {isGeneratingPDF ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 </button>
-                <button onClick={() => setIsDetailsOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#0F172A]/10 text-[#0F172A]/50 hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                <button onClick={() => setIsDetailsOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-full bg-[#0F172A]/10 text-[#0F172A]/50 hover:bg-rose-50 hover:text-rose-500 transition-colors">
                   <XCircle className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
             {/* Actions Bar */}
-            <div className="px-6 py-3 border-b border-[#0F172A]/5 bg-[#0F172A]/10/50 flex flex-wrap gap-2">
+            <div className="px-4 py-2 border-b border-[#0F172A]/5 bg-[#0F172A]/10/50 flex flex-wrap gap-2">
               <button 
-                onClick={() => handleStatusChange(selectedQuote, 'sent')}
-                className="inline-flex items-center px-3 py-1.5 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-lg text-xs font-semibold text-slate-700 hover:bg-[#0F172A]/10"
+                onClick={() => navigate('/emails')}
+                className="inline-flex items-center px-2.5 py-1 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-md text-[10px] font-semibold text-slate-700 hover:bg-[#0F172A]/10"
               >
-                <Send className="w-3.5 h-3.5 mr-1.5 text-blue-500" /> Send Quote
+                <Send className="w-3 h-3 mr-1 text-blue-500" /> Send Quote
               </button>
               <button 
                 onClick={() => handleStatusChange(selectedQuote, 'accepted')}
-                className="inline-flex items-center px-3 py-1.5 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-lg text-xs font-semibold text-emerald-600 hover:bg-emerald-50"
+                className="inline-flex items-center px-2.5 py-1 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-md text-[10px] font-semibold text-emerald-600 hover:bg-emerald-50"
               >
-                <CheckCircle className="w-3.5 h-3.5 mr-1.5" /> Accept
+                <CheckCircle className="w-3 h-3 mr-1" /> Accept
               </button>
               <button 
                 onClick={() => handleStatusChange(selectedQuote, 'rejected')}
-                className="inline-flex items-center px-3 py-1.5 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                className="inline-flex items-center px-2.5 py-1 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-md text-[10px] font-semibold text-rose-600 hover:bg-rose-50"
               >
-                <XCircle className="w-3.5 h-3.5 mr-1.5" /> Reject
+                <XCircle className="w-3 h-3 mr-1" /> Reject
               </button>
               <button 
                 onClick={() => handleConvertToInvoice(selectedQuote)}
-                className="inline-flex items-center px-3 py-1.5 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-lg text-xs font-semibold text-emerald-600 hover:bg-emerald-50"
+                className="inline-flex items-center px-2.5 py-1 bg-[#F8FAFC] border border-[#0F172A]/20 rounded-md text-[10px] font-semibold text-emerald-600 hover:bg-emerald-50"
               >
-                <FileOutput className="w-3.5 h-3.5 mr-1.5" /> Convert to Invoice
+                <FileOutput className="w-3 h-3 mr-1" /> Convert to Invoice
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 space-y-3">
               {/* Customer & Deal Info */}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest mb-2">Customer Info</h4>
-                  <p className="text-sm font-semibold text-[#0F172A]">{selectedQuote.customer_name || 'N/A'}</p>
-                  <p className="text-xs text-[#0F172A]/70 mt-0.5">Linked to Deal: {selectedQuote.deal_title || 'N/A'}</p>
+                  <h4 className="text-[10px] font-bold text-[#0F172A]/50 uppercase tracking-widest mb-1">Customer Info</h4>
+                  <p className="text-xs font-semibold text-[#0F172A]">{selectedQuote.customer_name || 'N/A'}</p>
+                  <p className="text-[10px] text-[#0F172A]/70 mt-0.5">Linked to Deal: {selectedQuote.deal_title || 'N/A'}</p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest mb-2">Financials</h4>
-                  <p className="text-xl font-bold text-[#0F172A]">${parseFloat(selectedQuote.amount).toLocaleString()}</p>
-                  <p className="text-xs text-[#0F172A]/70 mt-0.5 flex items-center">
+                  <h4 className="text-[10px] font-bold text-[#0F172A]/50 uppercase tracking-widest mb-1">Financials</h4>
+                  <p className="text-sm font-bold text-[#0F172A]">₹{parseFloat(selectedQuote.amount).toLocaleString()}</p>
+                  <p className="text-[10px] text-[#0F172A]/70 mt-0.5 flex items-center">
                     <Clock className="w-3 h-3 mr-1" /> Valid Until: {selectedQuote.valid_until ? dayjs(selectedQuote.valid_until).format('MMM D, YYYY') : 'N/A'}
                   </p>
                 </div>
               </div>
 
-              {/* Project Requirements */}
-              <div className="border-t border-[#0F172A]/10 pt-5">
-                <h4 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest mb-3">Project Requirements</h4>
-                <div className="bg-[#0F172A]/10 rounded-lg p-4 space-y-3">
-                  <div>
-                    <span className="text-xs font-bold text-[#0F172A]/70">Requirement Summary:</span>
-                    <p className="text-sm text-slate-700 mt-0.5">{selectedQuote.requirement_summary || 'No summary provided.'}</p>
+              {/* Project Requirements & Terms */}
+              <div className="border-t border-[#0F172A]/10 pt-3 grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-[10px] font-bold text-[#0F172A]/50 uppercase tracking-widest mb-1.5">Project Requirements</h4>
+                  <div className="bg-[#0F172A]/10 rounded-md p-2 space-y-1">
+                    <div>
+                      <span className="text-[10px] font-bold text-[#0F172A]/70">Requirement Summary:</span>
+                      <p className="text-[10px] text-slate-700 mt-0.5 line-clamp-2">{selectedQuote.requirement_summary || 'No summary provided.'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div>
+                        <span className="text-[10px] font-bold text-[#0F172A]/70">Tech Stack:</span>
+                        <p className="text-[10px] text-slate-700 mt-0.5 truncate">{selectedQuote.tech_stack || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-[#0F172A]/70">Timeline:</span>
+                        <p className="text-[10px] text-slate-700 mt-0.5 truncate">{selectedQuote.timeline || 'N/A'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <span className="text-xs font-bold text-[#0F172A]/70">Tech Stack:</span>
-                      <p className="text-sm text-slate-700 mt-0.5">{selectedQuote.tech_stack || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-[#0F172A]/70">Timeline:</span>
-                      <p className="text-sm text-slate-700 mt-0.5">{selectedQuote.timeline || 'N/A'}</p>
-                    </div>
+                </div>
+                
+                <div>
+                  <h4 className="text-[10px] font-bold text-[#0F172A]/50 uppercase tracking-widest mb-1.5">Terms & Conditions</h4>
+                  <div className="bg-[#0F172A]/5 rounded-md p-2 space-y-1 text-[10px] text-[#0F172A]/70">
+                    <p className="truncate"><span className="font-bold">Payment:</span> {selectedQuote.payment_terms || '50% advance, 50% on completion'}</p>
+                    <p className="truncate"><span className="font-bold">Delivery:</span> {selectedQuote.delivery_terms || 'Digital delivery'}</p>
+                    <p className="truncate"><span className="font-bold">Revision:</span> {selectedQuote.revision_policy || 'Up to 3 revisions included'}</p>
                   </div>
                 </div>
               </div>
 
               {/* Quote Items Table */}
-              <div className="border-t border-[#0F172A]/10 pt-5">
-                <h4 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest mb-3">Quote Items</h4>
-                <div className="overflow-hidden border border-[#0F172A]/20 rounded-lg">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-[#0F172A]/10">
+              <div className="border-t border-[#0F172A]/10 pt-3">
+                <h4 className="text-[10px] font-bold text-[#0F172A]/50 uppercase tracking-widest mb-1.5">Quote Items</h4>
+                <div className="overflow-hidden border border-[#0F172A]/20 rounded-md">
+                  <table className="min-w-full divide-y divide-slate-200 relative">
+                    <thead className="bg-[#0F172A]/10 sticky top-0 z-20 shadow-sm">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest">Item</th>
-                        <th className="px-4 py-2 text-right text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest">Qty</th>
-                        <th className="px-4 py-2 text-right text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest">Price</th>
-                        <th className="px-4 py-2 text-right text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest">Total</th>
+                        <th className="px-2 py-1.5 text-left text-[10px] font-bold text-[#0F172A]/70 uppercase tracking-widest">Item</th>
+                        <th className="px-2 py-1.5 text-right text-[10px] font-bold text-[#0F172A]/70 uppercase tracking-widest">Qty</th>
+                        <th className="px-2 py-1.5 text-right text-[10px] font-bold text-[#0F172A]/70 uppercase tracking-widest">Price</th>
+                        <th className="px-2 py-1.5 text-right text-[10px] font-bold text-[#0F172A]/70 uppercase tracking-widest">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {selectedQuote.line_items?.length > 0 ? (
                         selectedQuote.line_items.map((item, idx) => (
                           <tr key={idx}>
-                            <td className="px-4 py-2 text-sm text-[#0F172A]">{item.product_name || `Item #${item.product}`}</td>
-                            <td className="px-4 py-2 text-sm text-[#0F172A]/70 text-right">{item.quantity}</td>
-                            <td className="px-4 py-2 text-sm text-[#0F172A]/70 text-right">${parseFloat(item.unit_price).toLocaleString()}</td>
-                            <td className="px-4 py-2 text-sm text-[#0F172A] text-right font-semibold">${parseFloat(item.line_total).toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-[10px] text-[#0F172A] truncate max-w-[120px]">{item.product_name || `Item #${item.product}`}</td>
+                            <td className="px-2 py-1.5 text-[10px] text-[#0F172A]/70 text-right">{item.quantity}</td>
+                            <td className="px-2 py-1.5 text-[10px] text-[#0F172A]/70 text-right">₹{parseFloat(item.unit_price).toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-[10px] text-[#0F172A] text-right font-semibold">₹{parseFloat(item.line_total).toLocaleString()}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td className="px-4 py-2 text-sm text-[#0F172A]">Custom Project Service</td>
-                          <td className="px-4 py-2 text-sm text-[#0F172A]/70 text-right">1</td>
-                          <td className="px-4 py-2 text-sm text-[#0F172A]/70 text-right">${parseFloat(selectedQuote.amount).toLocaleString()}</td>
-                          <td className="px-4 py-2 text-sm text-[#0F172A] text-right font-semibold">${parseFloat(selectedQuote.amount).toLocaleString()}</td>
+                          <td className="px-2 py-1.5 text-[10px] text-[#0F172A] truncate max-w-[120px]">Custom Project Service</td>
+                          <td className="px-2 py-1.5 text-[10px] text-[#0F172A]/70 text-right">1</td>
+                          <td className="px-2 py-1.5 text-[10px] text-[#0F172A]/70 text-right">₹{parseFloat(selectedQuote.amount).toLocaleString()}</td>
+                          <td className="px-2 py-1.5 text-[10px] text-[#0F172A] text-right font-semibold">₹{parseFloat(selectedQuote.amount).toLocaleString()}</td>
                         </tr>
                       )}
                     </tbody>
@@ -836,50 +878,41 @@ export default function Quotes() {
                 </div>
               </div>
 
-              {/* Pricing Summary */}
-              <div className="border-t border-[#0F172A]/10 pt-5 flex justify-end">
-                <div className="w-64 space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#0F172A]/70">Subtotal:</span>
-                    <span className="font-semibold text-[#0F172A]">${parseFloat(selectedQuote.amount).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[#0F172A]/70">Tax (GST 18%):</span>
-                    <span className="font-semibold text-[#0F172A]">${(parseFloat(selectedQuote.amount) * 0.18).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-[#0F172A]/20 pt-2 text-base font-bold">
-                    <span className="text-[#0F172A]">Grand Total:</span>
-                    <span className="text-[#0F172A]">${(parseFloat(selectedQuote.amount) * 1.18).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Terms & Conditions */}
-              <div className="border-t border-[#0F172A]/10 pt-5">
-                <h4 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest mb-3">Terms & Conditions</h4>
-                <div className="space-y-2 text-xs text-[#0F172A]/70">
-                  <p><span className="font-bold">Payment:</span> {selectedQuote.payment_terms || '50% advance, 50% on completion'}</p>
-                  <p><span className="font-bold">Delivery:</span> {selectedQuote.delivery_terms || 'Digital delivery'}</p>
-                  <p><span className="font-bold">Revision:</span> {selectedQuote.revision_policy || 'Up to 3 revisions included'}</p>
-                </div>
-              </div>
-
-              {/* Activity Timeline */}
-              <div className="border-t border-[#0F172A]/10 pt-5">
-                <h4 className="text-xs font-bold text-[#0F172A]/50 uppercase tracking-widest mb-3">Activity Timeline</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                    <span className="text-xs font-bold text-slate-700">Quote Created</span>
-                    <span className="text-xs text-[#0F172A]/70">{dayjs(selectedQuote.created_at).format('MMM D, YYYY HH:mm')}</span>
-                  </div>
-                  {selectedQuote.status !== 'draft' && (
-                    <div className="flex items-center space-x-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                      <span className="text-xs font-bold text-slate-700">Quote Marked as {selectedQuote.status}</span>
-                      <span className="text-xs text-[#0F172A]/70">{dayjs(selectedQuote.updated_at).format('MMM D, YYYY HH:mm')}</span>
+              {/* Timeline & Summary */}
+              <div className="border-t border-[#0F172A]/10 pt-3 flex justify-between items-start gap-4">
+                {/* Activity Timeline */}
+                <div className="flex-1">
+                  <h4 className="text-[10px] font-bold text-[#0F172A]/50 uppercase tracking-widest mb-1.5">Activity Timeline</h4>
+                  <div className="space-y-1.5 bg-[#0F172A]/5 rounded-md p-2">
+                    <div className="flex items-center space-x-1.5">
+                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full flex-shrink-0" />
+                      <span className="text-[10px] font-bold text-slate-700">Created</span>
+                      <span className="text-[9px] text-[#0F172A]/70 ml-auto">{dayjs(selectedQuote.created_at).format('MMM D, HH:mm')}</span>
                     </div>
-                  )}
+                    {selectedQuote.status !== 'draft' && (
+                      <div className="flex items-center space-x-1.5">
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />
+                        <span className="text-[10px] font-bold text-slate-700 capitalize">Marked {selectedQuote.status}</span>
+                        <span className="text-[9px] text-[#0F172A]/70 ml-auto">{dayjs(selectedQuote.updated_at).format('MMM D, HH:mm')}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Pricing Summary */}
+                <div className="flex-1 space-y-1 bg-[#0F172A]/10 p-2 rounded-md">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-[#0F172A]/70">Subtotal:</span>
+                    <span className="font-semibold text-[#0F172A]">₹{parseFloat(selectedQuote.amount).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-[#0F172A]/70">Tax (18%):</span>
+                    <span className="font-semibold text-[#0F172A]">₹{(parseFloat(selectedQuote.amount) * 0.18).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-[#0F172A]/20 pt-1 text-xs font-bold mt-1">
+                    <span className="text-[#0F172A]">Total:</span>
+                    <span className="text-[#0F172A]">₹{(parseFloat(selectedQuote.amount) * 1.18).toLocaleString()}</span>
+                  </div>
                 </div>
               </div>
 
@@ -926,6 +959,20 @@ export default function Quotes() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Quote Amount (₹) *</label>
+                  <div className="relative">
+                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#0F172A]/50" />
+                     <input type="number" className="w-full pl-9 pr-3 py-2 bg-[#0F172A]/10 border border-[#0F172A]/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10" value={editFormData.amount} onChange={e => setEditFormData({...editFormData, amount: e.target.value})} placeholder="0.00" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Customer Name</label>
+                  <input type="text" className="w-full px-3 py-2 bg-[#0F172A]/10 border border-[#0F172A]/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10" value={editFormData.customer_name || ''} onChange={e => setEditFormData({...editFormData, customer_name: e.target.value})} placeholder="Enter customer name" />
+                </div>
                 <div>
                   <label className="block text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mb-1">Valid Until</label>
                   <input type="date" className="w-full px-3 py-2 bg-[#0F172A]/10 border border-[#0F172A]/20 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10" value={editFormData.valid_until} onChange={e => setEditFormData({...editFormData, valid_until: e.target.value})} />
@@ -1004,13 +1051,13 @@ export default function Quotes() {
                   <div className="flex justify-between text-sm">
                     <span className="text-[#0F172A]/70">Subtotal:</span>
                     <span className="font-semibold text-[#0F172A]">
-                      ${editFormData.line_items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toLocaleString()}
+                      ₹{editFormData.line_items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0).toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-[#0F172A]/20 pt-2 text-base font-bold">
                     <span className="text-[#0F172A]">Estimated Total:</span>
                     <span className="text-[#0F172A]">
-                      ${(editFormData.line_items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0) * 1.18).toLocaleString()}
+                      ₹{(editFormData.line_items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0) * 1.18).toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -1029,64 +1076,65 @@ export default function Quotes() {
 
       {/* Hidden Printable/PDF Area (Positioned off-screen) */}
       {selectedQuote && (
-        <div id={`printable-quote-${selectedQuote.id}`} className="absolute -left-[9999px] top-0 p-10 bg-[#F8FAFC] text-[#0F172A] w-[800px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ position: 'fixed', left: '-9999px', top: '0' }}>
+        <div id={`printable-quote-${selectedQuote.id}`} className="p-8 bg-[#F8FAFC] text-[#0F172A] w-[600px] shadow-sm rounded-lg" style={{ fontFamily: 'Inter, sans-serif' }}>
           <div className="flex justify-between items-start border-b-2 border-[#0F172A]/20 pb-5">
             <div>
-              <h1 className="text-3xl font-bold text-[#0F172A]">QUOTATION</h1>
+              <h1 className="text-2xl font-bold text-[#0F172A]">QUOTATION</h1>
               <p className="text-sm text-[#0F172A]/70 mt-1"># {selectedQuote.quote_number}</p>
             </div>
             <div className="text-right">
-              <h2 className="text-lg font-bold">Your Company Name</h2>
+              <h2 className="text-md font-bold">Your Company Name</h2>
               <p className="text-xs text-[#0F172A]/70">support@yourcompany.com</p>
               <p className="text-xs text-[#0F172A]/70">+1 234 567 890</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-10 mt-6">
+          <div className="grid grid-cols-2 gap-8 mt-6">
             <div>
-              <h3 className="text-xs font-bold text-[#0F172A]/50 uppercase mb-1">Prepared For</h3>
-              <p className="text-base font-bold">{selectedQuote.customer_name || 'N/A'}</p>
-              <p className="text-sm text-[#0F172A]/70">Deal: {selectedQuote.deal_title || 'N/A'}</p>
+              <h3 className="text-[10px] font-bold text-[#0F172A]/50 uppercase mb-1">Prepared For</h3>
+              <p className="text-sm font-bold">{selectedQuote.customer_name || 'N/A'}</p>
+              <p className="text-xs text-[#0F172A]/70">Deal: {selectedQuote.deal_title || 'N/A'}</p>
             </div>
             <div className="text-right">
-              <h3 className="text-xs font-bold text-[#0F172A]/50 uppercase mb-1">Quote Details</h3>
-              <p className="text-sm"><span className="font-semibold">Date:</span> {dayjs(selectedQuote.created_at).format('MMM D, YYYY')}</p>
-              <p className="text-sm"><span className="font-semibold">Valid Until:</span> {selectedQuote.valid_until ? dayjs(selectedQuote.valid_until).format('MMM D, YYYY') : 'N/A'}</p>
-              <p className="text-sm"><span className="font-semibold">Sales Owner:</span> {selectedQuote.owner_full_name || 'N/A'}</p>
+              <h3 className="text-[10px] font-bold text-[#0F172A]/50 uppercase mb-1">Quote Details</h3>
+              <p className="text-xs"><span className="font-semibold">Date:</span> {dayjs(selectedQuote.created_at).format('MMM D, YYYY')}</p>
+              <p className="text-xs"><span className="font-semibold">Valid Until:</span> {selectedQuote.valid_until ? dayjs(selectedQuote.valid_until).format('MMM D, YYYY') : 'N/A'}</p>
+              <p className="text-xs"><span className="font-semibold">Sales Owner:</span> {selectedQuote.owner_full_name || 'N/A'}</p>
             </div>
           </div>
 
-          <div className="mt-8">
-            <h3 className="text-xs font-bold text-[#0F172A]/50 uppercase mb-2">Project Requirements</h3>
-            <p className="text-sm text-slate-700 bg-[#0F172A]/10 p-3 rounded">{selectedQuote.requirement_summary || 'No summary provided.'}</p>
+          <div className="mt-6">
+            <h3 className="text-[10px] font-bold text-[#0F172A]/50 uppercase mb-2">Project Requirements</h3>
+            <p className="text-xs text-slate-700 bg-[#0F172A]/10 p-3 rounded">{selectedQuote.requirement_summary || 'No summary provided.'}</p>
           </div>
 
-          <div className="mt-8">
-            <table className="min-w-full divide-y divide-slate-200 border border-[#0F172A]/20">
-              <thead className="bg-[#0F172A]/10">
+          <div className="mt-6">
+            <table className="min-w-full divide-y divide-slate-200 border border-[#0F172A]/20 relative">
+              <thead className="bg-[#0F172A]/10 sticky top-0 z-20 shadow-sm">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-bold text-[#0F172A]/70 uppercase">Item</th>
-                  <th className="px-4 py-2 text-right text-xs font-bold text-[#0F172A]/70 uppercase">Qty</th>
-                  <th className="px-4 py-2 text-right text-xs font-bold text-[#0F172A]/70 uppercase">Price</th>
-                  <th className="px-4 py-2 text-right text-xs font-bold text-[#0F172A]/70 uppercase">Total</th>
+                  <th className="px-3 py-2 text-left text-[10px] font-bold text-[#0F172A]/70 uppercase">Item</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-bold text-[#0F172A]/70 uppercase">Qty</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-bold text-[#0F172A]/70 uppercase">Price</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-bold text-[#0F172A]/70 uppercase">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {selectedQuote.line_items?.length > 0 ? (
                   selectedQuote.line_items.map((item, idx) => (
                     <tr key={idx}>
-                      <td className="px-4 py-2 text-sm">{item.product_name || `Item #${item.product}`}</td>
-                      <td className="px-4 py-2 text-sm text-right">{item.quantity}</td>
-                      <td className="px-4 py-2 text-sm text-right">${parseFloat(item.unit_price).toLocaleString()}</td>
-                      <td className="px-4 py-2 text-sm text-right font-semibold">${parseFloat(item.line_total).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs">{item.product_name || `Item #${item.product}`}</td>
+                      <td className="px-3 py-2 text-xs text-right">{item.quantity}</td>
+                      <td className="px-3 py-2 text-xs text-right">₹{parseFloat(item.unit_price).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs text-right font-semibold">₹{parseFloat(item.line_total).toLocaleString()}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td className="px-4 py-2 text-sm">Custom Project Service</td>
-                    <td className="px-4 py-2 text-sm text-right">1</td>
-                    <td className="px-4 py-2 text-sm text-right">${parseFloat(selectedQuote.amount).toLocaleString()}</td>
-                    <td className="px-4 py-2 text-sm text-right font-semibold">${parseFloat(selectedQuote.amount).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs">Custom Project Service</td>
+                    <td className="px-3 py-2 text-xs text-right">1</td>
+                    <td className="px-3 py-2 text-xs text-right">₹{parseFloat(selectedQuote.amount).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs text-right font-semibold">₹{parseFloat(selectedQuote.amount).toLocaleString()}</td>
                   </tr>
                 )}
               </tbody>
@@ -1094,35 +1142,36 @@ export default function Quotes() {
           </div>
 
           <div className="mt-6 flex justify-end">
-            <div className="w-64 space-y-2 border-t border-[#0F172A]/20 pt-3">
-              <div className="flex justify-between text-sm">
+            <div className="w-56 space-y-2 border-t border-[#0F172A]/20 pt-3">
+              <div className="flex justify-between text-xs">
                 <span>Subtotal:</span>
-                <span className="font-semibold">${parseFloat(selectedQuote.amount).toLocaleString()}</span>
+                <span className="font-semibold">₹{parseFloat(selectedQuote.amount).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-xs">
                 <span>Tax (18%):</span>
-                <span className="font-semibold">${(parseFloat(selectedQuote.amount) * 0.18).toLocaleString()}</span>
+                <span className="font-semibold">₹{(parseFloat(selectedQuote.amount) * 0.18).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-base font-bold border-t border-[#0F172A]/20 pt-2">
+              <div className="flex justify-between text-sm font-bold border-t border-[#0F172A]/20 pt-2">
                 <span>Grand Total:</span>
-                <span className="text-[#0F172A]">${(parseFloat(selectedQuote.amount) * 1.18).toLocaleString()}</span>
+                <span className="text-[#0F172A]">₹{(parseFloat(selectedQuote.amount) * 1.18).toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-10 grid grid-cols-2 gap-10">
+          <div className="mt-8 grid grid-cols-2 gap-8">
             <div>
-              <h3 className="text-xs font-bold text-[#0F172A]/50 uppercase mb-1">Terms & Conditions</h3>
-              <p className="text-xs text-[#0F172A]/70">Payment: {selectedQuote.payment_terms || '50% advance'}</p>
-              <p className="text-xs text-[#0F172A]/70">Delivery: {selectedQuote.delivery_terms || 'Digital'}</p>
-              <p className="text-xs text-[#0F172A]/70">Revision: {selectedQuote.revision_policy || '3 revisions'}</p>
+              <h3 className="text-[10px] font-bold text-[#0F172A]/50 uppercase mb-1">Terms & Conditions</h3>
+              <p className="text-[10px] text-[#0F172A]/70">Payment: {selectedQuote.payment_terms || '50% advance'}</p>
+              <p className="text-[10px] text-[#0F172A]/70">Delivery: {selectedQuote.delivery_terms || 'Digital'}</p>
+              <p className="text-[10px] text-[#0F172A]/70">Revision: {selectedQuote.revision_policy || '3 revisions'}</p>
             </div>
             <div className="flex flex-col items-end justify-end">
-              <div className="border-t border-slate-300 w-48 text-center pt-2 mt-10">
-                <p className="text-xs font-bold">Authorized Signature</p>
+              <div className="border-t border-slate-300 w-40 text-center pt-2 mt-6">
+                <p className="text-[10px] font-bold">Authorized Signature</p>
               </div>
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -1151,30 +1200,29 @@ export default function Quotes() {
                     <Download className="w-3.5 h-3.5 mr-2 text-[#0F172A]/50" /> Download PDF
                   </button>
                   <div className="border-t border-[#0F172A]/10 my-1"></div>
-                  <button onClick={() => handleStatusChange(row, 'sent')} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
-                    <Send className="w-3.5 h-3.5 mr-2 text-blue-500" /> Mark as Sent
+                  {<button onClick={() => navigate('/emails')} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
+                    <Send className="w-3.5 h-3.5 mr-2 text-blue-500" /> Mail
                   </button>
+                  /* <button onClick={() => handleStatusChange(row, 'sent')} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
+                    <Send className="w-3.5 h-3.5 mr-2 text-slate-500" /> Mark as Sent
+                  </button> */}
                   <button onClick={() => handleStatusChange(row, 'negotiating')} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
                     <TrendingUp className="w-3.5 h-3.5 mr-2 text-amber-500" /> Mark as Negotiating
                   </button>
-                  {row.status === 'sent' && can('quote.approve') && (
-                    <button onClick={() => handleApprove(row)} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
-                      <CheckCircle className="w-3.5 h-3.5 mr-2 text-emerald-500" /> Approve Quote
-                    </button>
-                  )}
+                  <button onClick={() => handleApprove(row)} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
+                    <CheckCircle className="w-3.5 h-3.5 mr-2 text-emerald-500" /> Approve Quote
+                  </button>
                   <button onClick={() => handleStatusChange(row, 'rejected')} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#0F172A]/10 flex items-center">
                     <XCircle className="w-3.5 h-3.5 mr-2 text-rose-500" /> Mark as Rejected
                   </button>
                   <div className="border-t border-[#0F172A]/10 my-1"></div>
-                  {can('invoice.generate') && (
-                    <button 
-                      onClick={() => handleConvertToInvoice(row)} 
-                      disabled={row.status !== 'accepted'}
-                      className={`w-full text-left px-4 py-2 text-xs flex items-center font-semibold ${row.status === 'accepted' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-[#0F172A]/50 cursor-not-allowed'}`}
-                    >
-                      <FileOutput className="w-3.5 h-3.5 mr-2" /> Convert to Invoice
-                    </button>
-                  )}
+                  <button 
+                    onClick={() => handleConvertToInvoice(row)} 
+                    disabled={row.status !== 'accepted'}
+                    className={`w-full text-left px-4 py-2 text-xs flex items-center font-semibold ${row.status === 'accepted' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-[#0F172A]/50 cursor-not-allowed'}`}
+                  >
+                    <FileOutput className="w-3.5 h-3.5 mr-2" /> Convert to Invoice
+                  </button>
                   <button onClick={() => handleDelete(row.id)} className="w-full text-left px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center font-semibold">
                     <Trash className="w-3.5 h-3.5 mr-2" /> Delete Quote
                   </button>
@@ -1185,6 +1233,15 @@ export default function Quotes() {
           document.body
         )
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

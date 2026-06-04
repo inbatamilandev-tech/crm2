@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { companyProfileApi } from '../../services/api';
 import { INPUT_STYLE } from '../../utils/themeUtils';
 import { Save, Loader2 } from 'lucide-react';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function CompanySettings() {
   const [formData, setFormData] = useState({
     name: '', website: '', phone: '', street_address: '', city: '', country: '', gst_number: '', timezone: 'UTC'
   });
   const [loading, setLoading] = useState(true);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     fetchCompany();
@@ -33,9 +35,19 @@ export default function CompanySettings() {
   const handleSave = async () => {
     try {
       await companyProfileApi.update(formData);
-      alert("Company settings updated successfully!");
+      setDialogConfig({
+        isOpen: true,
+        title: "Success",
+        description: "Company settings updated successfully!",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } catch (error) {
-      alert("Failed to update company settings.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: "Failed to update company settings.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     }
   };
 
@@ -75,6 +87,15 @@ export default function CompanySettings() {
           </button>
         </div>
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

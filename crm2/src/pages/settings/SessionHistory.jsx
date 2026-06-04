@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { securityApi } from '../../services/api';
 import { Monitor, Smartphone, Tablet, Globe, Clock, XCircle, LogOut, Shield } from 'lucide-react';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function SessionHistory() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     fetchSessions();
@@ -23,23 +25,37 @@ export default function SessionHistory() {
   };
 
   const handleLogout = async (id) => {
-    if (!window.confirm('Are you sure you want to terminate this session?')) return;
-    try {
-      await securityApi.logoutSession(id);
-      setSessions(sessions.map(s => s.id === id ? { ...s, is_active: false } : s));
-    } catch (error) {
-      console.error("Failed to logout session", error);
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Terminate Session",
+      description: "Are you sure you want to terminate this session?",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await securityApi.logoutSession(id);
+          setSessions(prev => prev.map(s => s.id === id ? { ...s, is_active: false } : s));
+        } catch (error) {
+          console.error("Failed to logout session", error);
+        }
+      }
+    });
   };
 
   const handleLogoutAll = async () => {
-    if (!window.confirm('This will log you out of all other devices. Continue?')) return;
-    try {
-      await securityApi.logoutAllSessions();
-      fetchSessions();
-    } catch (error) {
-      console.error("Failed to logout all sessions", error);
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Logout All Devices",
+      description: "This will log you out of all other devices. Continue?",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await securityApi.logoutAllSessions();
+          fetchSessions();
+        } catch (error) {
+          console.error("Failed to logout all sessions", error);
+        }
+      }
+    });
   };
 
   const getDeviceIcon = (deviceType) => {
@@ -153,6 +169,15 @@ export default function SessionHistory() {
           <div className="absolute -left-20 -bottom-20 w-64 h-64 bg-[#DF7F09]/20 rounded-full blur-3xl"></div>
         </div>
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Confirm"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

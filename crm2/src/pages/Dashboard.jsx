@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Users, DollarSign, Target, TrendingUp, Calendar, Download, 
   Handshake, ClipboardList, Mail, MoreHorizontal, Loader2, AlertCircle,
   ArrowUpRight, ArrowDownRight, Activity, Zap, CheckCircle2, Clock, Megaphone,
-  ShieldCheck
+  ShieldCheck, Send, MessageSquare, Bot
 } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, AreaChart, Area } from 'recharts';
-import { leadsApi, dealsApi, tasksApi, analyticsApi } from '../services/api';
+import { leadsApi, dealsApi, tasksApi, analyticsApi, accountsApi, contactsApi, activitiesApi } from '../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -22,6 +22,8 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const { lastMessage } = useWebSocket();
+
+  // Removed Activity Search state and logic for Work Queue Summary
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -46,10 +48,10 @@ export default function Dashboard() {
           id: deal.id,
           company: deal.title,
           contact: deal.contact ? 'Assigned' : 'Unassigned',
-          value: `$${parseFloat(deal.value || 0).toLocaleString()}`,
-          probability: deal.stage === 'Closed Won' ? 100 : deal.stage === 'Closed Lost' ? 0 : deal.stage === 'Proposal/Price Quote' ? 75 : 50,
+          value: `₹${parseFloat(deal.value || 0).toLocaleString()}`,
+          probability: deal.stage === 'successfully closed' ? 100 : deal.stage === 'Closed Lost' ? 0 : deal.stage === 'Proposal/Price Quote' ? 75 : 50,
           status: deal.stage,
-          statusColor: deal.stage === 'Closed Won' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-[#0F172A]',
+          statusColor: deal.stage === 'successfully closed' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-[#0F172A]',
         })));
       } catch (err) {
         setError("Failed to sync dashboard metrics");
@@ -70,7 +72,7 @@ export default function Dashboard() {
           <p className="mt-1 text-[#0F172A]/70 font-medium">Real-time performance metrics across all operational nodes.</p>
         </div>
         <div className="flex items-center space-x-3">
-          <button 
+          {/* <button 
             onClick={() => {
               const nextInterval = interval === 'monthly' ? 'quarterly' : interval === 'quarterly' ? 'annual' : 'monthly';
               setInterval(nextInterval);
@@ -79,7 +81,7 @@ export default function Dashboard() {
           >
             <Calendar className="mr-2 h-4 w-4 text-[#0F172A]/50" />
             Interval: {interval === 'monthly' ? '30D' : interval === 'quarterly' ? '90D' : '1Y'}
-          </button>
+          </button> */}
           <button 
             onClick={() => {
               const csvContent = "data:text/csv;charset=utf-8,leads,deals,revenue\n" + stats.leads + "," + stats.deals + "," + stats.revenue;
@@ -131,7 +133,7 @@ export default function Dashboard() {
           />
           <StatCard 
             title="Pipeline Value" 
-            value={`$${stats.revenue.toLocaleString()}`} 
+            value={`₹${stats.revenue.toLocaleString()}`} 
             trend="-2.1%" 
             trendUp={false} 
             icon={<DollarSign className="w-5 h-5" />} 
@@ -169,7 +171,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center p-1 bg-[#0F172A]/20/50 rounded-xl">
                <button className="px-4 py-1.5 bg-[#F8FAFC] shadow-sm rounded-lg text-xs font-bold text-[#0F172A]">Current</button>
-               <button className="px-4 py-1.5 rounded-lg text-xs font-bold text-[#0F172A]/50 hover:text-[#0F172A]/70 transition-colors">Historical</button>
+               {/* <button className="px-4 py-1.5 rounded-lg text-xs font-bold text-[#0F172A]/50 hover:text-[#0F172A]/70 transition-colors">Historical</button> */}
             </div>
           </div>
           
@@ -201,44 +203,7 @@ export default function Dashboard() {
           <Activity className="absolute -right-6 -bottom-6 w-48 h-48 text-[#0F172A] opacity-[0.03] group-hover:rotate-12 transition-transform duration-1000" />
         </div>
 
-        <div className="bg-[#0F172A] p-8 rounded-[32px] shadow-2xl shadow-slate-900/40 flex flex-col relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
-             <Target className="w-32 h-32 text-[#F8FAFC]" />
-          </div>
-          <div className="relative z-10">
-            <h3 className="text-xl font-black text-[#F8FAFC] tracking-tight">Source Distribution</h3>
-            <p className="text-xs font-bold text-[#0F172A]/70 uppercase tracking-widest mt-2">Lead Attribution Matrix</p>
-          </div>
-
-          <div className="mt-10 space-y-5 flex-1 relative z-10">
-            {leadSources.slice(0, 5).map((source) => (
-              <div key={source.name} className="space-y-2">
-                <div className="flex justify-between items-center text-[11px] font-black uppercase tracking-widest text-[#0F172A]/50">
-                  <span>{source.name}</span>
-                  <span className="text-[#F8FAFC]">{source.value}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-[#F8FAFC]/5 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full rounded-full transition-all duration-1000" 
-                    style={{ width: `${source.value}%`, backgroundColor: source.color }} 
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-[#F8FAFC]/10 relative z-10">
-             <div className="p-5 bg-[#F8FAFC]/5 rounded-[24px] flex items-center justify-between group-hover:bg-[#F8FAFC]/10 transition-colors">
-                <div>
-                   <p className="text-[#F8FAFC] text-[10px] font-black uppercase tracking-widest opacity-40">Intelligence Health</p>
-                   <p className="text-[#F8FAFC] text-2xl font-black mt-1 tracking-tighter">Optimal</p>
-                </div>
-                <div className="w-12 h-12 rounded-2xl bg-[#0F172A]/20 flex items-center justify-center text-[#0F172A] shadow-lg shadow-[#0F172A]/10">
-                   <ShieldCheck className="w-6 h-6" />
-                </div>
-             </div>
-          </div>
-        </div>
+        <WorkQueueSummaryWidget />
       </div>
 
       {/* Deal Pipeline Row */}
@@ -349,6 +314,128 @@ function StatCard({ title, value, trend, trendUp, icon, color, bg }) {
         <h3 className="text-2xl font-black text-[#0F172A] mt-1">{value}</h3>
       </div>
       <div className={`absolute -right-2 -bottom-2 w-16 h-16 ${bg} opacity-5 rounded-full blur-2xl group-hover:scale-150 transition-transform`} />
+    </div>
+  );
+}
+
+function WorkQueueSummaryWidget() {
+  const [metrics, setMetrics] = useState({
+    pending: 0,
+    completed: 0,
+    overdue: 0,
+    highPriority: 0,
+    dueToday: 0,
+    dueThisWeek: 0,
+  });
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [tasksRes, activitiesRes] = await Promise.all([
+          tasksApi.getAll(),
+          activitiesApi.getAll()
+        ]);
+        const tasks = tasksRes.results || tasksRes || [];
+        const activities = activitiesRes.results || activitiesRes || [];
+
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        
+        let pending = 0;
+        let completed = 0;
+        let overdue = 0;
+        let highPriority = 0;
+        let dueToday = 0;
+        let dueThisWeek = 0;
+
+        tasks.forEach(t => {
+          if (t.status === 'Completed' || t.status === 'Done') completed++;
+          else pending++;
+
+          if (t.priority === 'High' && t.status !== 'Completed' && t.status !== 'Done') highPriority++;
+
+          if (t.due_date) {
+            const dueDate = new Date(t.due_date);
+            const dueStr = t.due_date.split('T')[0];
+            if (t.status !== 'Completed' && t.status !== 'Done') {
+              if (dueDate < now && dueStr !== todayStr) overdue++;
+              if (dueStr === todayStr) dueToday++;
+              
+              const diffTime = dueDate.getTime() - now.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              if (diffDays >= 0 && diffDays <= 7) dueThisWeek++;
+            }
+          }
+        });
+
+        setMetrics({ pending, completed, overdue, highPriority, dueToday, dueThisWeek });
+        setRecentActivities(activities.slice(0, 4));
+      } catch (err) {
+        console.error("Failed to load work queue data", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="bg-[#F8FAFC]/80 backdrop-blur-md p-8 rounded-[32px] border border-[#0F172A]/20 shadow-xl shadow-slate-200/20 flex items-center justify-center h-[450px]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#0F172A]/50" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[#F8FAFC]/80 backdrop-blur-md p-8 rounded-[32px] border border-[#0F172A]/20 shadow-xl shadow-slate-200/20 flex flex-col relative overflow-hidden group h-[450px]">
+      <div className="mb-6">
+        <h3 className="text-xl font-black text-[#0F172A] tracking-tight uppercase">Work Queue Summary</h3>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="bg-blue-50 p-4 rounded-2xl flex flex-col">
+          <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest">Pending Work</span>
+          <span className="text-2xl font-black text-[#0F172A] mt-1">{metrics.pending}</span>
+        </div>
+        <div className="bg-emerald-50 p-4 rounded-2xl flex flex-col">
+          <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest">Completed Work</span>
+          <span className="text-2xl font-black text-emerald-600 mt-1">{metrics.completed}</span>
+        </div>
+        <div className="bg-rose-50 p-4 rounded-2xl flex flex-col">
+          <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest">Overdue Work</span>
+          <span className="text-2xl font-black text-rose-600 mt-1">{metrics.overdue}</span>
+        </div>
+        <div className="bg-amber-50 p-4 rounded-2xl flex flex-col">
+          <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest">High Priority</span>
+          <span className="text-2xl font-black text-amber-600 mt-1">{metrics.highPriority}</span>
+        </div>
+        <div className="bg-[#0F172A]/5 p-4 rounded-2xl flex flex-col">
+          <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest">Due Today</span>
+          <span className="text-2xl font-black text-[#0F172A] mt-1">{metrics.dueToday}</span>
+        </div>
+        <div className="bg-[#0F172A]/5 p-4 rounded-2xl flex flex-col">
+          <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest">Due This Week</span>
+          <span className="text-2xl font-black text-[#0F172A] mt-1">{metrics.dueThisWeek}</span>
+        </div>
+      </div>
+
+      <div className="flex-1 border-t border-[#0F172A]/10 pt-4 overflow-y-auto custom-scrollbar">
+        <span className="text-[11px] font-black text-[#0F172A]/50 uppercase tracking-widest block mb-3">Recent Activity</span>
+        <ul className="space-y-3">
+          {recentActivities.map((act, i) => (
+            <li key={i} className="flex items-start text-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 mr-2 shrink-0"></span>
+              <span className="text-[#0F172A]/80 font-medium">{act.notes || act.type || 'Activity logged'}</span>
+            </li>
+          ))}
+          {recentActivities.length === 0 && (
+            <li className="text-sm text-[#0F172A]/50 italic">No recent activities found.</li>
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

@@ -29,7 +29,7 @@ from workflows.views import WorkflowViewSet, WorkflowLogViewSet, WorkflowTraceVi
 from quotes.views import QuoteViewSet
 from invoices.views import InvoiceViewSet
 from support.views import CaseViewSet, SolutionViewSet, ServiceViewSet, FeedbackViewSet, SupportStatsAPIView
-from users.views import UserViewSet, RoleViewSet, LoginHistoryView, UserDetailView, UserSessionViewSet, AuditLogView, SecurityPolicyView, NotificationViewSet
+from users.views import UserViewSet, RoleViewSet, PermissionViewSet, LoginHistoryView, UserDetailView, UserSessionViewSet, AuditLogView, SecurityPolicyView, NotificationViewSet
 
 router = DefaultRouter()
 router.register(r'leads', LeadViewSet, basename='lead')
@@ -39,8 +39,8 @@ router.register(r'deals', DealViewSet, basename='deal')
 router.register(r'products', ProductViewSet, basename='product')
 router.register(r'tasks', TaskViewSet, basename='task')
 router.register(r'activity-logs', ActivityLogViewSet, basename='activity-log')
-router.register(r'activities', ActivityViewSet)
-router.register(r'meetings', MeetingViewSet)
+router.register(r'activities', ActivityViewSet, basename='activity')
+router.register(r'meetings', MeetingViewSet, basename='meeting')
 router.register(r'calls', CallViewSet, basename='call')
 router.register(r'comments', CommentViewSet, basename='comment')
 router.register(r'activity-feed', UnifiedActivityViewSet, basename='activity-feed')
@@ -57,6 +57,7 @@ router.register(r'services', ServiceViewSet)
 router.register(r'feedback', FeedbackViewSet)
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'roles', RoleViewSet, basename='role')
+router.register(r'permissions', PermissionViewSet, basename='permission')
 router.register(r'security/sessions', UserSessionViewSet, basename='security-session')
 router.register(r'notifications', NotificationViewSet, basename='notification')
 

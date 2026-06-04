@@ -16,6 +16,7 @@ import {
 import { campaignsApi, marketingApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -108,6 +109,7 @@ export default function Marketing() {
   const [copied, setCopied] = useState(false);
   const { addToast } = useToast();
   const { lastMessage } = useWebSocket();
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   // Simulator state
   const [simData, setSimData] = useState({ name: '', email: '', message: '', campaign_id: '' });
@@ -182,14 +184,21 @@ export default function Marketing() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Archive this campaign?')) return;
-    try {
-      await campaignsApi.delete(id);
-      addToast('Campaign archived', 'success');
-      fetchData();
-    } catch {
-      addToast('Action failed', 'error');
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Archive Campaign",
+      description: "Are you sure you want to archive this campaign? It will be moved to the archive section.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await campaignsApi.delete(id);
+          addToast('Campaign archived', 'success');
+          fetchData();
+        } catch {
+          addToast('Action failed', 'error');
+        }
+      }
+    });
   };
 
   const filteredCampaigns = useMemo(() => {
@@ -398,8 +407,8 @@ export default function Marketing() {
 
       {/* Campaign List */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden overflow-x-auto">
-        <table className="w-full text-left">
-          <thead>
+        <table className="w-full text-left relative">
+          <thead className="sticky top-0 z-20 bg-white">
             <tr className="bg-slate-50/50 border-b border-slate-100">
               {['Campaign Details', 'Channel', 'Revenue', 'ROI', 'Leads', 'Status', 'Dates', ''].map(h => (
                 <th key={h} className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>
@@ -908,6 +917,15 @@ export default function Marketing() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Archive"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

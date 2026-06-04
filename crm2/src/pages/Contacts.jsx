@@ -9,6 +9,7 @@ import {
 import { useToast } from '../context/ToastContext';
 import { usePagination } from '../hooks/usePagination';
 import Pagination from '../components/Pagination';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Contacts() {
   const { 
@@ -32,6 +33,7 @@ export default function Contacts() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const { addToast } = useToast();
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   // Debounce search term
   useEffect(() => {
@@ -85,21 +87,26 @@ export default function Contacts() {
   }, [fetchContacts]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Archiving this contact will remove it from active pipelines. Proceed?")) return;
-    try {
-      await contactsApi.delete(id);
-      addToast("Contact successfully archived");
-      fetchContacts();
-    } catch (err) {
-      addToast("Failed to archive contact", "error");
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Record",
+      description: "Archiving this contact will remove it from active pipelines. Proceed?",
+      onConfirm: async () => {
+        setDialogConfig({ ...dialogConfig, isOpen: false });
+        try {
+          await contactsApi.delete(id);
+          addToast("Contact successfully archived");
+          fetchContacts();
+        } catch (err) {
+          addToast("Failed to archive contact", "error");
+        }
+      }
+    });
   };
 
   const columns = [
     { 
-      header: (
-        <div className="text-[10px] font-black text-[#0F172A]/50 uppercase tracking-[0.2em]">Contact Identity</div>
-      ),
+      header: 'Contact Identity',
       accessor: 'name',
       render: (row) => {
         const initials = row.name.split(' ').map(n => n[0]).join('');
@@ -235,7 +242,7 @@ export default function Contacts() {
       </div>
 
       {/* Main Container */}
-      <div className="bg-[#F8FAFC] rounded-[32px] border border-[#0F172A]/20 shadow-xl shadow-slate-200/40 overflow-hidden min-h-[500px] relative">
+      <div className="bg-[#F8FAFC] rounded-[32px] border border-[#0F172A]/20 shadow-xl shadow-slate-200/40 overflow-hidden relative">
         {isLoading ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F8FAFC]/80 z-20 backdrop-blur-[1px]">
             <div className="w-12 h-12 border-4 border-[#0F172A]/10 border-t-blue-600 rounded-full animate-spin" />
@@ -254,31 +261,58 @@ export default function Contacts() {
           </div>
         ) : null}
 
-        <Table columns={columns} data={contacts} />
+        <div className="overflow-auto max-h-[500px] relative">
+          <table className="min-w-full divide-y divide-[#0F172A]/20">
+            <thead className="bg-[#0F172A] sticky top-0 z-20">
+              <tr>
+                {columns.map((col, idx) => (
+                  <th
+                    key={idx}
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-black text-[#F8FAFC] uppercase tracking-wider"
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-[#F8FAFC] divide-y divide-[#0F172A]/20">
+              {contacts.map((row, rowIndex) => (
+                <tr key={rowIndex} className="hover:bg-[#0F172A]/20 transition-colors">
+                  {columns.map((col, colIndex) => (
+                    <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-[#0F172A] font-medium">
+                      {col.render ? col.render(row) : row[col.accessor]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-        <Pagination
+        {/* <Pagination
           currentPage={currentPage}
           totalPages={totalPages}
           totalRecords={totalRecords}
           rowsPerPage={rowsPerPage}
           onPageChange={setPage}
           onRowsPerPageChange={changeRowsPerPage}
-        />
-        
+        /> */}
+{/*         
         {filteredData.length === 0 && !isLoading && (
-           <div className="p-20 flex flex-col items-center justify-center text-center">
-              <div className="w-24 h-24 bg-[#0F172A]/10 rounded-full flex items-center justify-center mb-6 border border-[#0F172A]/10">
-                 <Globe className="w-10 h-10 text-slate-300" />
-              </div>
-              <h3 className="text-xl font-black text-[#0F172A]">No Records Found</h3>
-              <p className="text-[#0F172A]/70 mt-2 font-medium">Your search criteria didn't return any active contacts.</p>
-           </div>
-        )}
+          //  <div className="p-20 flex flex-col items-center justify-center text-center">
+          //     <div className="w-24 h-24 bg-[#0F172A]/10 rounded-full flex items-center justify-center mb-6 border border-[#0F172A]/10">
+          //        <Globe className="w-10 h-10 text-slate-300" />
+          //     </div>
+          //     <h3 className="text-xl font-black text-[#0F172A]">No Records Found</h3>
+          //     <p className="text-[#0F172A]/70 mt-2 font-medium">Your search criteria didn't return any active contacts.</p>
+          //  </div>
+        )} */}
       </div>
 
       {/* Register Record Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-10 p-4">
           <div className="fixed inset-0 bg-[#0F172A]/40 backdrop-blur-sm animate-fade-in" onClick={resetForm} />
           <div className="bg-[#F8FAFC] rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden relative z-10 animate-in zoom-in-95 duration-300">
             <div className="px-8 py-6 border-b border-[#0F172A]/5 flex items-center justify-between">
@@ -328,6 +362,15 @@ export default function Contacts() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

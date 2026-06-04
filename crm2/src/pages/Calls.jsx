@@ -217,17 +217,16 @@ export default function Calls() {
 
   /* ─── RENDER ───────────────────────────────────────────── */
   return (
-    <div className="space-y-8 animate-fade-in max-w-[1400px] mx-auto pb-10">
+    <div className="flex flex-col h-[calc(100vh-80px)] animate-fade-in max-w-[1400px] mx-auto p-4 gap-3 overflow-hidden">
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="flex-shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-3">
         <div>
-          <div className="flex items-center space-x-2 mb-1">
-            <PhoneCall className="w-5 h-5 text-blue-600" />
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Workflow Engine</span>
+          <div className="flex items-center space-x-2 mb-0.5">
+            <PhoneCall className="w-4 h-4 text-blue-600" />
+            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Workflow Engine</span>
           </div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Call Execution Dashboard</h2>
-          <p className="text-sm text-slate-400 mt-1">Execute tasks, record outcomes — workflow handles the rest.</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Call Execution Dashboard</h2>
         </div>
         <div className="flex items-center space-x-3">
           <div className="relative group">
@@ -246,7 +245,7 @@ export default function Calls() {
 
       {/* Live Call Banner */}
       {activeCallId && (
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[24px] p-6 text-white shadow-xl shadow-blue-600/30 flex items-center justify-between animate-pulse-slow">
+        <div className="flex-shrink-0 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[24px] p-6 text-white shadow-xl shadow-blue-600/30 flex items-center justify-between animate-pulse-slow">
           <div className="flex items-center space-x-4">
             <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-sm"><PhoneOutgoing className="w-6 h-6" /></div>
             <div>
@@ -266,7 +265,7 @@ export default function Calls() {
 
       {/* Stats Row */}
       {dashboard?.stats && metrics && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { label: 'Total Calls', value: dashboard.stats.total_call_tasks, icon: PhoneCall, color: 'text-blue-600 bg-blue-50' },
             { label: 'Overdue', value: dashboard.stats.overdue_count, icon: AlertTriangle, color: 'text-rose-600 bg-rose-50' },
@@ -274,36 +273,36 @@ export default function Calls() {
             { label: 'Conversion', value: `${metrics.call_to_conversion_rate}%`, icon: TrendingUp, color: 'text-emerald-600 bg-emerald-50' },
             { label: 'Completed', value: metrics.total_completed, icon: BarChart3, color: 'text-indigo-600 bg-indigo-50' },
           ].map((s, i) => (
-            <div key={i} className="bg-white rounded-[24px] border border-slate-200 shadow-sm p-5">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{s.label}</p>
+            <div key={i} className="bg-white rounded-[20px] border border-slate-200 shadow-sm p-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{s.label}</p>
                 <div className={`p-1.5 rounded-xl ${s.color}`}><s.icon className="w-3.5 h-3.5" /></div>
               </div>
-              <h4 className={`text-2xl font-black ${s.color.split(' ')[0]}`}>{s.value}</h4>
+              <h4 className={`text-xl font-black ${s.color.split(' ')[0]}`}>{s.value}</h4>
             </div>
           ))}
         </div>
       )}
 
       {/* Call Queue */}
-      <div className="bg-white rounded-[32px] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden min-h-[300px]">
-        <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+      <div className="flex-1 bg-white rounded-[32px] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-shrink-0 px-6 py-4 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
           <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Call Execution Queue</h3>
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filtered.length} active tasks</span>
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-64">
+          <div className="flex-1 flex flex-col items-center justify-center">
             <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
             <p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Loading Dashboard…</p>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center p-8">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <AlertCircle className="w-10 h-10 text-rose-500 mb-4" />
             <p className="text-slate-500 font-medium">{error}</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center p-8">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
               <PhoneCall className="w-8 h-8 text-slate-300" />
             </div>
@@ -311,14 +310,14 @@ export default function Calls() {
             <p className="text-slate-400 text-sm mt-1">All calls have been completed. Great work!</p>
           </div>
         ) : (
-          <ul className="divide-y divide-slate-50">
+          <ul className="flex-1 overflow-y-auto divide-y divide-slate-50">
             {filtered.map(task => {
               const strTaskId = String(task.id);
               const bucket = getBucket(task);
               const isActive = String(activeCallId) === strTaskId;
               return (
-                <li key={strTaskId} className={`px-8 py-5 transition-all group ${isActive ? 'bg-blue-50/50 border-l-4 border-blue-500' : 'hover:bg-slate-50/50'}`}>
-                  <div className="flex items-center gap-5">
+                <li key={strTaskId} className={`px-6 py-3 transition-all group ${isActive ? 'bg-blue-50/50 border-l-4 border-blue-500' : 'hover:bg-slate-50/50'}`}>
+                  <div className="flex items-center gap-4">
                     {/* Icon */}
                     <div className={`flex-shrink-0 p-3.5 rounded-2xl transition-transform group-hover:scale-110 ${isActive ? 'bg-blue-100' : 'bg-slate-50'}`}>
                       {isActive ? <Timer className="w-5 h-5 text-blue-600 animate-pulse" /> : <PhoneOutgoing className="w-5 h-5 text-slate-400" />}
@@ -402,80 +401,10 @@ export default function Calls() {
         )}
       </div>
 
-      {/* Recent History Section */}
-      {dashboard?.completed?.length > 0 && (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex items-center space-x-2 mb-4 px-2">
-            <CheckCircle className="w-5 h-5 text-emerald-600" />
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recent History (Last 24h)</span>
-          </div>
-          
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden opacity-75 hover:opacity-100 transition-opacity">
-            <ul className="divide-y divide-slate-50">
-              {dashboard.completed.map(task => {
-                const bucket = getBucket(task);
-                return (
-                  <li key={task.id} className="px-8 py-4 bg-slate-50/30">
-                    <div className="flex items-center gap-5">
-                      <div className="flex-shrink-0 p-3 bg-white rounded-xl shadow-sm border border-slate-100">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                      </div>
-                      <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-5 gap-3 items-center">
-                        <div className="md:col-span-2">
-                          <h4 className="text-sm font-bold text-slate-500 truncate line-through">{task.title}</h4>
-                          <button 
-                            onClick={() => navigate(`/leads?id=${task.lead}`)}
-                            className="text-[10px] font-bold text-blue-400 hover:text-blue-600 uppercase tracking-widest mt-0.5"
-                          >
-                            {task.lead_name}
-                          </button>
-                        </div>
-                        <div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${OUTCOME_COLORS[task.outcome] || 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                            {task.outcome?.replace('_', ' ') || 'Completed'}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Finished</p>
-                          <p className="text-xs text-slate-400">{formatDate(task.completed_at)}</p>
-                        </div>
-                        <div className="text-right">
-                           <button 
-                             onClick={() => handleViewLog(task.id)}
-                             className="text-[10px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors"
-                           >
-                             {String(logTaskId) === String(task.id) ? 'Close Log' : 'View Log'}
-                           </button>
-                        </div>
-                      </div>
-                    </div>
-                    {String(logTaskId) === String(task.id) && (
-                      <div className="mt-4 ml-14 p-4 bg-white rounded-2xl border border-slate-100 shadow-inner animate-in slide-in-from-top-2">
-                        <div className="space-y-3">
-                          {activityLog.map((log, i) => (
-                            <div key={i} className="flex items-start space-x-3 text-xs">
-                              <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5" />
-                              <div>
-                                <p className="font-bold text-slate-700 capitalize">{log.action_type.replace('_', ' ')}</p>
-                                <p className="text-slate-400">{log.notes || 'No notes'}</p>
-                                <p className="text-[9px] text-slate-300 mt-0.5">{formatDate(log.timestamp)}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </div>
-      )}
 
       {/* Outcome Modal */}
       {outcomeModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-10 overflow-y-auto">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in" onClick={() => !submittingOutcome && setOutcomeModal(null)} />
           <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-md overflow-hidden relative z-10">
             <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">

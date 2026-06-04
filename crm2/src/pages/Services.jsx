@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { servicesApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Services() {
   const { addToast } = useToast();
@@ -21,6 +22,7 @@ export default function Services() {
   const [billingType, setBillingType] = useState('Monthly');
   const [slaPolicy, setSlaPolicy] = useState('');
   const [description, setDescription] = useState('');
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const fetchServices = () => {
     setLoading(true);
@@ -107,15 +109,22 @@ export default function Services() {
   };
 
   const handleDeleteService = (id) => {
-    if (!window.confirm('Are you sure you want to delete this service?')) return;
-    servicesApi.delete(id)
-    .then(() => {
-      fetchServices();
-      addToast('Service deleted successfully', 'success');
-    })
-    .catch(err => {
-      console.error("[Services] Error in handleDeleteService:", err);
-      addToast('Failed to delete service', 'error');
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Service",
+      description: "Are you sure you want to delete this service? This action cannot be undone.",
+      onConfirm: () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        servicesApi.delete(id)
+        .then(() => {
+          fetchServices();
+          addToast('Service deleted successfully', 'success');
+        })
+        .catch(err => {
+          console.error("[Services] Error in handleDeleteService:", err);
+          addToast('Failed to delete service', 'error');
+        });
+      }
     });
   };
 
@@ -128,7 +137,7 @@ export default function Services() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-30 bg-[#f8fafc] py-4 shadow-sm border-b border-slate-200 -mx-6 px-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Services</h1>
           <p className="text-sm text-slate-500 mt-1">Manage service offerings and SLA policies.</p>
@@ -194,7 +203,7 @@ export default function Services() {
               <h3 className="text-lg font-bold text-slate-900 mb-2">{service.name}</h3>
               
               <div className="flex items-baseline mb-4">
-                <span className="text-2xl font-black text-slate-900">${service.price}</span>
+                <span className="text-2xl font-black text-slate-900">₹{service.price}</span>
                 <span className="text-xs font-bold text-slate-400 ml-1">/ {service.billing_type}</span>
               </div>
 
@@ -224,7 +233,7 @@ export default function Services() {
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
               <div>
                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Name</label>
                 <input 
@@ -320,7 +329,7 @@ export default function Services() {
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
               <div>
                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Service Name</label>
                 <input 
@@ -404,6 +413,15 @@ export default function Services() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

@@ -241,7 +241,7 @@ SIMPLE_JWT = {
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-# Email Configuration
+# Email Configuration (SMTP — for sending emails)
 # ──────────────────────────────────────────────────────────────────────────────
 # Set USE_SMTP=true in your environment (or .env file) to activate real SMTP delivery.
 # For Gmail: use an App Password (not your normal password).
@@ -251,7 +251,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 #   EMAIL_HOST=smtp.gmail.com
 #   EMAIL_PORT=587
 #   EMAIL_HOST_USER=youraddress@gmail.com
-#   EMAIL_HOST_PASSWORD=your_app_password
+#   EMAIL_HOST_PASSWORD=your_app_password   (Gmail App Password)
 #   DEFAULT_FROM_EMAIL=youraddress@gmail.com
 #   USE_SMTP=true
 # ──────────────────────────────────────────────────────────────────────────────
@@ -269,6 +269,17 @@ EMAIL_USE_TLS       = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'
 EMAIL_HOST_USER     = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL  = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@crm.example.com')
+
+# IMAP Configuration (for receiving / inbox emails)
+# ──────────────────────────────────────────────────────────────────────────────
+# These settings are used by IMAPService to fetch incoming emails from Gmail.
+# IMAP_USER and IMAP_PASSWORD default to EMAIL_HOST_USER/PASSWORD if not set.
+# ──────────────────────────────────────────────────────────────────────────────
+IMAP_HOST     = os.getenv('IMAP_HOST', 'imap.gmail.com')
+IMAP_PORT     = int(os.getenv('IMAP_PORT', 993))
+IMAP_USER     = os.getenv('IMAP_USER') or EMAIL_HOST_USER
+IMAP_PASSWORD = os.getenv('IMAP_PASSWORD') or EMAIL_HOST_PASSWORD
+IMAP_MAILBOX  = os.getenv('IMAP_MAILBOX', 'INBOX')
 
 # ===========================================================================
 # Logging — structured output for Django, Celery, and Workflow engine
@@ -383,6 +394,12 @@ CELERY_BEAT_SCHEDULE = {
     'check-unopened-emails': {
         'task': 'emails.tasks.check_unopened_emails',
         'schedule': crontab(hour=0, minute=0),  # Run daily at midnight
+    },
+    # Fetch incoming emails from Gmail IMAP every 5 minutes
+    'fetch-inbox-emails': {
+        'task': 'emails.tasks.fetch_inbox_emails',
+        'schedule': 5 * 60,  # every 5 minutes
+        'options': {'expires': 4 * 60},
     },
 }
 

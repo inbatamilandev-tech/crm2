@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Settings, Play, Pause, Activity, MoreVertical, Edit2, Trash2, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { workflowsApi } from '../../../services/api';
+import ConfirmationDialog from '../../../components/ConfirmationDialog';
 
 export default function WorkflowList() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     fetchWorkflows();
@@ -37,13 +39,20 @@ export default function WorkflowList() {
   };
 
   const deleteWorkflow = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this workflow?')) return;
-    try {
-      await workflowsApi.delete(id);
-      setWorkflows(workflows.filter(wf => wf.id !== id));
-    } catch (error) {
-      console.error("Failed to delete workflow", error);
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Workflow",
+      description: "Are you sure you want to delete this workflow? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await workflowsApi.delete(id);
+          setWorkflows(prev => prev.filter(wf => wf.id !== id));
+        } catch (error) {
+          console.error("Failed to delete workflow", error);
+        }
+      }
+    });
   };
 
   return (
@@ -104,7 +113,7 @@ export default function WorkflowList() {
       <div className="bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
-            <thead>
+            <thead className="sticky top-0 z-20 shadow-sm">
               <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/5">
                 <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                 <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Workflow Name</th>
@@ -184,6 +193,14 @@ export default function WorkflowList() {
         </div>
       </div>
 
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

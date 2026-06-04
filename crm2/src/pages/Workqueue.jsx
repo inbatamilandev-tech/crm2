@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { tasksApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Workqueue() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function Workqueue() {
   const [tasks, setTasks] = useState([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
   const { addToast } = useToast();
 
   const fetchTasks = async () => {
@@ -94,27 +96,34 @@ export default function Workqueue() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
-    try {
-      await tasksApi.delete(id);
-      addToast('Task deleted successfully');
-      fetchTasks();
-    } catch (err) {
-      addToast('Failed to delete task', 'error');
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Task",
+      description: "Are you sure you want to delete this task? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await tasksApi.delete(id);
+          addToast('Task deleted successfully');
+          fetchTasks();
+        } catch (err) {
+          addToast('Failed to delete task', 'error');
+        }
+      }
+    });
   };
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-[1400px] mx-auto pb-10">
+    <div className="flex flex-col h-[calc(100vh-80px)] animate-fade-in max-w-[1400px] mx-auto p-4 gap-3 overflow-hidden">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+      <div className="flex-shrink-0 flex flex-col md:flex-row md:items-end justify-between gap-3">
         <div>
-           <div className="flex items-center space-x-2 mb-1">
-             <ListTodo className="w-5 h-5 text-blue-600" />
-             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activities</span>
+           <div className="flex items-center space-x-2 mb-0.5">
+             <ListTodo className="w-4 h-4 text-blue-600" />
+             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Activities</span>
           </div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Workqueue</h2>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Workqueue</h2>
         </div>
         
         <div className="flex items-center space-x-3">
@@ -131,7 +140,7 @@ export default function Workqueue() {
           <button className="p-2.5 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
             <Filter className="w-4 h-4" />
           </button>
-          <button className="inline-flex items-center px-6 py-2.5 bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl shadow-slate-900/20 hover:-translate-y-0.5 active:translate-y-0 transition-all">
+          <button className="hidden inline-flex items-center px-6 py-2.5 bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl shadow-slate-900/20 hover:-translate-y-0.5 active:translate-y-0 transition-all">
             <Zap className="mr-2 w-4 h-4 fill-current" />
             Integrate Protocol
           </button>
@@ -139,20 +148,20 @@ export default function Workqueue() {
       </div>
 
       {/* Filter Stats Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="flex-shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3">
          {['All', 'Overdue', 'Today', 'Upcoming'].map((f) => (
            <button
              key={f}
              onClick={() => setFilter(f)}
-             className={`glass-card p-6 flex flex-col items-start transition-all ${
+             className={`glass-card p-4 flex flex-col items-start transition-all ${
                filter === f ? 'bg-slate-900 border-slate-900 shadow-xl shadow-slate-900/20' : 'hover:bg-slate-50'
              }`}
            >
-              <span className={`text-[10px] font-black uppercase tracking-widest ${filter === f ? 'text-slate-400' : 'text-slate-500'}`}>
+              <span className={`text-[9px] font-black uppercase tracking-widest ${filter === f ? 'text-slate-400' : 'text-slate-500'}`}>
                  {f} Logic
               </span>
               <div className="flex items-center justify-between w-full mt-1">
-                 <h4 className={`text-2xl font-black ${filter === f ? 'text-white' : 'text-slate-900'}`}>
+                 <h4 className={`text-xl font-black ${filter === f ? 'text-white' : 'text-slate-900'}`}>
                     {f === 'All' ? tasks.length : tasks.filter(t => t.status === f).length}
                  </h4>
                  {filter === f && <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />}
@@ -162,14 +171,14 @@ export default function Workqueue() {
       </div>
 
       {/* Registry Container */}
-      <div className="bg-white rounded-[32px] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden min-h-[500px]">
+      <div className="flex-1 bg-white rounded-[32px] border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden flex flex-col min-h-0">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center h-[500px]">
+          <div className="flex-1 flex flex-col items-center justify-center">
              <div className="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin" />
              <p className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Synchronizing Workqueue Registry...</p>
           </div>
         ) : filteredTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[500px] text-center p-8">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <div className="w-20 h-20 bg-emerald-50 rounded-[32px] flex items-center justify-center text-emerald-500 mb-6 shadow-inner">
                <CheckCircle2 className="w-10 h-10" />
             </div>
@@ -177,19 +186,19 @@ export default function Workqueue() {
             <p className="text-slate-400 text-sm max-w-sm font-medium">All active registry entries have been successfully processed or no matches exist for the current filter.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-50">
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
             {filteredTasks.map((task) => (
-              <div key={task.id} className="p-6 md:p-8 hover:bg-slate-50/50 transition-all group flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div className="flex items-center space-x-6">
+              <div key={task.id} className="p-3 md:p-4 hover:bg-slate-50/50 transition-all group flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-center space-x-4">
                   {/* Executive Action Trigger */}
                   <button 
                     onClick={() => markComplete(task.id)}
-                    className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 hover:bg-emerald-50 hover:text-emerald-500 transition-all border border-slate-100 group-hover:scale-105"
+                    className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 hover:bg-emerald-50 hover:text-emerald-500 transition-all border border-slate-100 group-hover:scale-105"
                   >
-                    <CheckSquare className="w-6 h-6" />
+                    <CheckSquare className="w-5 h-5" />
                   </button>
 
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${getTypeBadge(task.type)}`}>
                         {task.type}
@@ -202,7 +211,7 @@ export default function Workqueue() {
                         <span className="ml-1.5 capitalize">{task.priority} Priority</span>
                       </div>
                     </div>
-                    <h4 className="text-xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
+                    <h4 className="text-lg font-black text-slate-900 group-hover:text-blue-600 transition-colors">{task.title}</h4>
                     <div className="flex items-center space-x-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <span className="flex items-center">
                          <LayoutGrid className="w-3.5 h-3.5 mr-1.5" />
@@ -266,6 +275,15 @@ export default function Workqueue() {
           </div>
         )}
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

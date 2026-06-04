@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { feedbackApi, casesApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 const StarRating = ({ value, onChange, readonly = false }) => (
   <div className="flex items-center gap-1">
@@ -43,6 +44,7 @@ export default function Feedback() {
   const [filterRating, setFilterRating] = useState('all');
   const [stats, setStats] = useState({ avgRating: 0, totalReviews: 0, csat: 0, dist: [0,0,0,0,0] });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   // Form state
   const [selectedCase, setSelectedCase] = useState('');
@@ -124,10 +126,17 @@ export default function Feedback() {
   };
 
   const handleDelete = (id) => {
-    if (!window.confirm('Delete this feedback entry?')) return;
-    feedbackApi.delete(id)
-      .then(() => { fetchFeedback(); addToast('Feedback deleted', 'success'); })
-      .catch(() => addToast('Failed to delete feedback', 'error'));
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Feedback",
+      description: "Are you sure you want to delete this feedback entry? This action cannot be undone.",
+      onConfirm: () => {
+        setDialogConfig({ ...dialogConfig, isOpen: false });
+        feedbackApi.delete(id)
+          .then(() => { fetchFeedback(); addToast('Feedback deleted', 'success'); })
+          .catch(() => addToast('Failed to delete feedback', 'error'));
+      }
+    });
   };
 
   const filtered = feedback.filter(fb => {
@@ -248,8 +257,8 @@ export default function Feedback() {
         </div>
 
         {/* Feedback cards */}
-        <div className="lg:col-span-2 bg-white/80 backdrop-blur-xl border border-slate-100 rounded-3xl p-6 shadow-sm">
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2">
+        <div className="lg:col-span-2 bg-white/80 backdrop-blur-xl border border-slate-100 rounded-3xl p-6 shadow-sm h-[calc(100vh-150px)] flex flex-col">
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2 shrink-0">
             <Award className="w-4 h-4 text-blue-500" />
             Customer Reviews
             <span className="ml-auto text-xs font-bold text-slate-400">{filtered.length} entries</span>
@@ -276,7 +285,7 @@ export default function Feedback() {
               <p className="text-xs text-slate-400 mt-1">Click "Add Feedback" to record the first review.</p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto pr-1">
+            <div className="divide-y divide-slate-50 overflow-y-auto flex-1 pr-1">
               {filtered.map((fb) => {
                 const label = ratingLabel(fb.rating);
                 return (
@@ -414,6 +423,15 @@ export default function Feedback() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

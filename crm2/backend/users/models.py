@@ -15,23 +15,18 @@ class Role(models.Model):
         ('global', 'Global Access'),
     )
     name = models.CharField(max_length=50, unique=True) # e.g., Admin, Manager
-    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default='own')
+    data_scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default='own')
     permissions = models.ManyToManyField(Permission, related_name='roles')
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
 
 class User(AbstractUser):
-    ROLE_CHOICES = (
-        ('admin', 'Admin'),
-        ('manager', 'Manager'),
-        ('sales', 'Sales Rep'),
-    )
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='sales')
     team = models.CharField(max_length=100, blank=True, null=True)
     
-    # New FK to Role model
-    role_fk = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
+    # FK to Role model
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     language = models.CharField(max_length=50, default='English')
     timezone = models.CharField(max_length=50, default='UTC-8')
     theme = models.CharField(max_length=10, default='light')
@@ -42,7 +37,8 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
 
     def __str__(self):
-        return f"{self.username} ({self.get_role_display()})"
+        role_name = self.role.name if self.role else 'No Role'
+        return f"{self.username} ({role_name})"
 
 class LoginHistory(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='login_history')

@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { 
   FileText, Plus, Search, Download, CreditCard, 
   Clock, AlertCircle, Loader2, Filter, ChevronRight,
   DollarSign, ArrowUpRight, ArrowDownRight, Printer,
-  User, Briefcase, Trash2, Eye, XCircle, Send, CheckCircle
+  User, Briefcase, Trash2, Eye, XCircle, Send, CheckCircle, FileOutput, MoreHorizontal
 } from 'lucide-react';
-import { invoicesApi } from '../services/api';
+import { invoicesApi, quotesApi, notificationsApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import Table from '../components/Table';
 import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 import { CARD_CONTAINER, TEXT_PRIMARY, TEXT_SECONDARY, BORDER_DEFAULT, INPUT_STYLE, BUTTON_PRIMARY } from '../utils/themeUtils';
 
 export default function Invoices() {
   const { can } = useAuth();
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [generatingPDFId, setGeneratingPDFId] = useState(null);
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [availableQuotes, setAvailableQuotes] = useState([]);
+  const [isLoadingQuotes, setIsLoadingQuotes] = useState(false);
   const { addToast } = useToast();
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const fetchInvoices = async () => {
     try {
@@ -38,14 +48,54 @@ export default function Invoices() {
     fetchInvoices();
   }, []);
 
-  const handleSendInvoice = async (invoice) => {
+  const handleGenerateClick = async () => {
+    setIsGenerateModalOpen(true);
     try {
+      setIsLoadingQuotes(true);
+      const data = await quotesApi.getAll();
+      const quotesList = data.results || data;
+      const filtered = quotesList.filter(q => q.status === 'approved' || q.status === 'accepted');
+      setAvailableQuotes(filtered);
+    } catch (err) {
+      addToast('Failed to fetch quotes', 'error');
+    } finally {
+      setIsLoadingQuotes(false);
+    }
+  };
+
+  const handleConvertQuote = async (quote) => {
+    try {
+      await quotesApi.generateInvoice(quote.id);
+      
+      try {
+        await notificationsApi.create({
+          title: 'Invoice Generated',
+          message: `Invoice created successfully from Quote #${quote.quote_number}`,
+          type: 'success',
+          link: '/invoices'
+        });
+      } catch (notifErr) {
+        console.error('Failed to create notification', notifErr);
+      }
+
+      addToast('Invoice generated successfully!', 'success');
+      setIsGenerateModalOpen(false);
+      fetchInvoices();
+    } catch (err) {
+      const errorMsg = err.response?.data?.error || 'Failed to generate invoice';
+      addToast(errorMsg, 'error');
+    }
+  };
+
+  const handleSendInvoice = async (invoice) => {
+        try {
       await invoicesApi.sendInvoice(invoice.id);
       addToast('Invoice marked as sent!', 'success');
       fetchInvoices();
     } catch (err) {
       addToast('Failed to send invoice', 'error');
     }
+    // navigate('/emails');
   };
 
   const handleMarkPaid = async (invoice) => {
@@ -54,7 +104,8 @@ export default function Invoices() {
       addToast('Invoice marked as paid!', 'success');
       fetchInvoices();
     } catch (err) {
-      addToast('Failed to mark invoice as paid', 'error');
+      const errorMsg = err.response?.data?.error || 'Failed to mark invoice as paid';
+      addToast(errorMsg, 'error');
     }
   };
 
@@ -239,40 +290,15 @@ export default function Invoices() {
       render: (row) => (
         <div className="flex justify-end space-x-1">
           <button 
-            onClick={() => { setSelectedInvoice(row); setIsDetailsOpen(true); }}
-            className="p-1.5 text-slate-400 hover:text-tihvo-dark hover:bg-blue-50 rounded-lg transition-all" 
-            title="View Details"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setDropdownPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
+              setActiveDropdown(activeDropdown === row.id ? null : row.id);
+            }}
+            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all" 
+            title="More Actions"
           >
-            <Eye className="w-4 h-4" />
-          </button>
-          
-          {row.status === 'draft' && can('invoice.send') && (
-            <button 
-              onClick={() => handleSendInvoice(row)}
-              className="p-1.5 text-slate-400 hover:text-tihvo-dark hover:bg-blue-50 rounded-lg transition-all" 
-              title="Send Invoice"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          )}
-          
-          {(row.status === 'sent' || row.status === 'overdue') && can('invoice.mark_paid') && (
-            <button 
-              onClick={() => handleMarkPaid(row)}
-              className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" 
-              title="Mark as Paid"
-            >
-              <CheckCircle className="w-4 h-4" />
-            </button>
-          )}
-
-          <button 
-            onClick={() => handleDownloadPDF(row)}
-            className="p-1.5 text-slate-400 hover:text-tihvo-dark hover:bg-blue-50 rounded-lg transition-all" 
-            title="Download PDF"
-            disabled={generatingPDFId !== null}
-          >
-            {generatingPDFId === row.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <MoreHorizontal className="w-4 h-4" />
           </button>
         </div>
       )
@@ -306,7 +332,7 @@ export default function Invoices() {
           <button className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm">
             <Filter className="w-4 h-4" />
           </button>
-          <button className={BUTTON_PRIMARY}>
+          <button className={BUTTON_PRIMARY} onClick={handleGenerateClick}>
             <Plus className="mr-2 w-4 h-4" />
             Generate Invoice
           </button>
@@ -334,7 +360,7 @@ export default function Invoices() {
       </div>
 
       {/* Main Registry Container */}
-      <div className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[500px] transition-colors duration-200">
+      <div className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden min-h-[100px] transition-colors duration-200 [&>div.overflow-x-auto]:max-h-[calc(100vh-150px)] [&>div.overflow-x-auto]:overflow-y-auto">
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0F172A]/50 flex items-center justify-between">
            <h3 className={`text-xs font-bold uppercase tracking-widest ${TEXT_SECONDARY}`}>Fiscal Records</h3>
         </div>
@@ -351,9 +377,9 @@ export default function Invoices() {
 
       {/* Details Drawer */}
       {isDetailsOpen && selectedInvoice && (
-        <div className="fixed inset-0 z-[100] flex justify-end">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsDetailsOpen(false)} />
-          <div className="bg-[#F8FAFC] w-full max-w-2xl h-full shadow-2xl relative z-10 overflow-y-auto animate-fade-in">
+          <div className="bg-[#F8FAFC] w-full max-w-2xl max-h-[90vh] rounded-2xl shadow-2xl relative z-10 overflow-y-auto animate-fade-in">
             
             {/* Header */}
             <div className="px-6 py-5 border-b border-[#0F172A]/10 flex items-center justify-between sticky top-0 bg-[#F8FAFC] z-20">
@@ -403,8 +429,8 @@ export default function Invoices() {
                   <span className="text-[10px] font-bold text-tihvo-dark uppercase tracking-widest bg-blue-50 px-2 py-0.5 rounded">Live Synced from Quote</span>
                 </div>
                 <div className="overflow-hidden border border-slate-200 rounded-lg">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-50">
+                  <table className="min-w-full divide-y divide-slate-200 relative">
+                    <thead className="bg-slate-50 sticky top-0 z-20 shadow-sm">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-bold text-slate-500 uppercase tracking-widest">Item</th>
                         <th className="px-4 py-2 text-right text-xs font-bold text-slate-500 uppercase tracking-widest">Qty</th>
@@ -478,7 +504,8 @@ export default function Invoices() {
       )}
       {/* Hidden Printable/PDF Area */}
       {selectedInvoice && (
-        <div id={`printable-invoice-${selectedInvoice.id}`} className="absolute -left-[9999px] top-0 p-10 bg-[#F8FAFC] text-[#0F172A] w-[800px]" style={{ fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ position: 'fixed', left: '-9999px', top: '0' }}>
+        <div id={`printable-invoice-${selectedInvoice.id}`} className="p-8 bg-[#F8FAFC] text-[#0F172A] w-[600px] shadow-sm rounded-lg" style={{ fontFamily: 'Inter, sans-serif' }}>
           <div className="flex justify-between items-start mb-8">
             <div>
               <h1 className="text-3xl font-bold text-slate-900">INVOICE</h1>
@@ -555,7 +582,128 @@ export default function Invoices() {
             Thank you for your business!
           </div>
         </div>
+        </div>
       )}
+
+      {/* Generate Invoice Modal */}
+      {isGenerateModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 sm:p-6 pt-16 sm:pt-24">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsGenerateModalOpen(false)} />
+          <div className="bg-[#F8FAFC] w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl relative z-10 flex flex-col animate-fade-in">
+            <div className="px-6 py-5 border-b border-[#0F172A]/10 flex items-center justify-between bg-white rounded-t-2xl shrink-0">
+              <h3 className="text-xl font-bold text-slate-900">Generate Invoice from Quote</h3>
+              <button onClick={() => setIsGenerateModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-colors">
+                <XCircle className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1">
+              {isLoadingQuotes ? (
+                <div className="flex flex-col items-center justify-center h-32">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                  <p className="mt-2 text-sm text-slate-500">Loading eligible quotes...</p>
+                </div>
+              ) : availableQuotes.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-slate-500 text-sm">No approved or accepted quotes available to invoice.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {availableQuotes.map(quote => (
+                    <div key={quote.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:border-blue-300 transition-colors">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-900">#{quote.quote_number}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-emerald-50 text-emerald-600 border border-emerald-200">{quote.status}</span>
+                        </div>
+                        <p className="text-sm text-slate-600 mt-1">{quote.customer_name} • {quote.deal_title}</p>
+                        <p className="text-xs font-semibold text-slate-900 mt-1">{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(parseFloat(quote.amount))}</p>
+                      </div>
+                      <button 
+                        onClick={() => handleConvertQuote(quote)}
+                        className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-sm font-semibold transition-colors flex items-center"
+                      >
+                        <FileOutput className="w-4 h-4 mr-2" /> Convert
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portal for Actions Dropdown */}
+      {activeDropdown && (
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-[190]" onClick={() => setActiveDropdown(null)} />
+            <div 
+              className="absolute bg-white border border-slate-200 rounded-lg shadow-xl z-[200] py-1 w-48 animate-fade-in"
+              style={{ top: dropdownPosition.top, left: dropdownPosition.left - 150 }}
+            >
+              {(() => {
+                const row = invoices.find(inv => inv.id === activeDropdown);
+                if (!row) return null;
+                return (
+                  <>
+                    <button onClick={() => { setSelectedInvoice(row); setIsDetailsOpen(true); setActiveDropdown(null); }} className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center">
+                      <Eye className="w-3.5 h-3.5 mr-2 text-slate-400" /> View Details
+                    </button>
+                    
+                    {can('invoice.send') && (
+                      <button 
+                        onClick={() => { setActiveDropdown(null); navigate('/emails'); }}
+                        className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center"
+                      >
+                        <Send className="w-3.5 h-3.5 mr-2 text-blue-500" /> Send Invoice
+                      </button>
+                    )}
+
+                    {can('invoice.mark_paid') && (
+                      <button 
+                        onClick={() => {
+                          setActiveDropdown(null);
+                          setDialogConfig({
+                            isOpen: true,
+                            title: 'Mark Invoice as Paid',
+                            description: 'Are you sure you want to mark this invoice as paid?',
+                            onConfirm: () => { 
+                              handleMarkPaid(row); 
+                              setDialogConfig(prev => ({ ...prev, isOpen: false })); 
+                            }
+                          });
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5 mr-2 text-emerald-500" /> Mark as Paid
+                      </button>
+                    )}
+
+                    <button 
+                      onClick={() => { setActiveDropdown(null); handleDownloadPDF(row); }}
+                      disabled={generatingPDFId !== null}
+                      className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center"
+                    >
+                      {generatingPDFId === row.id ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin text-slate-400" /> : <Download className="w-3.5 h-3.5 mr-2 text-slate-400" />} Download PDF
+                    </button>
+                  </>
+                );
+              })()}
+            </div>
+          </>,
+          document.body
+        )
+      )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Confirm"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

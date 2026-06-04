@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Plus, GripVertical, Trash2, Save, Activity, LayoutList, GitMerge } from 'lucide-react';
 import { INPUT_STYLE } from '../../utils/themeUtils';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 
 export default function SalesPreferences() {
   const [activeTab, setActiveTab] = useState('pipelines');
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
   const [stages, setStages] = useState([
     { id: 1, name: 'Lead', probability: 10, color: '#94a3b8' },
     { id: 2, name: 'Qualified', probability: 40, color: '#3b82f6' },
@@ -24,11 +26,21 @@ export default function SalesPreferences() {
     setStages(stages.map(s => s.id === id ? { ...s, [field]: value } : s));
   };
 
+  const handleSave = () => {
+    // Simulate save logic
+    setDialogConfig({
+      isOpen: true,
+      title: "Success",
+      description: "Sales preferences updated successfully!",
+      onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+    });
+  };
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-black uppercase tracking-wider text-[#095D95] dark:text-[#50B1B9]">Sales Preferences</h2>
-        <button className="flex items-center px-4 py-2 bg-[#095D95] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-[#074773] transition-colors shadow-lg shadow-[#095D95]/20">
+        <button onClick={handleSave} className="flex items-center px-4 py-2 bg-[#095D95] text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-[#074773] transition-colors shadow-lg shadow-[#095D95]/20">
           <Save className="w-4 h-4 mr-2" />
           Save Changes
         </button>
@@ -146,9 +158,9 @@ export default function SalesPreferences() {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Default Deal Currency</label>
                   <select className={INPUT_STYLE}>
-                    <option>USD ($)</option>
+                    {/* <option>USD ($)</option>
                     <option>EUR (€)</option>
-                    <option>GBP (£)</option>
+                    <option>GBP (£)</option> */}
                     <option>INR (₹)</option>
                   </select>
                 </div>
@@ -156,7 +168,7 @@ export default function SalesPreferences() {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Default Pipeline</label>
                   <select className={INPUT_STYLE}>
                     <option>Standard Sales Pipeline</option>
-                    <option>Enterprise Sales</option>
+                    {/* <option>Enterprise Sales</option> */}
                   </select>
                 </div>
               </div>
@@ -165,6 +177,15 @@ export default function SalesPreferences() {
           
         </div>
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

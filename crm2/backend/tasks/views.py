@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from activities.models import Activity
 from .models import ActivityLog, Task
 from .serializers import ActivityLogSerializer, TaskSerializer
-from users.permissions import RoleBasedAccessPermission
+from users.permissions import HasModulePermission
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,8 @@ class TaskViewSet(viewsets.ModelViewSet):
       GET  /tasks/call_dashboard/       → returns call tasks grouped by priority/overdue
     """
     serializer_class = TaskSerializer
-    permission_classes = [RoleBasedAccessPermission]
+    permission_classes = [HasModulePermission]
+    rbac_module = 'task'
     filterset_fields = ['status', 'priority', 'task_type', 'source_object_id', 'is_active', 'lead', 'project', 'milestone']
     search_fields = ['title', 'description']
     ordering_fields = ['created_at', 'due_date', 'priority']
@@ -45,20 +46,21 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Task.objects.none()
+        if not user.role:
+            return Task.objects.none()
 
         base_qs = Task.objects.select_related('assigned_to', 'lead', 'contact', 'deal')
+        scope = user.role.data_scope
 
         from django.db.models import Q
-        if user.role == 'admin':
+        if scope == 'global':
             return base_qs.all()
-        if user.role == 'manager':
+        if scope == 'team':
             if not user.team:
                 return base_qs.none()
             return base_qs.filter(Q(assigned_to__team=user.team) | Q(active_by=user))
-        if user.role == 'sales':
-            return base_qs.filter(Q(assigned_to=user) | Q(active_by=user))
-
-        return base_qs.none()
+        # 'own' scope
+        return base_qs.filter(Q(assigned_to=user) | Q(active_by=user))
 
     # ------------------------------------------------------------------
     # Standard CRUD overrides
@@ -95,6 +97,23 @@ class TaskViewSet(viewsets.ModelViewSet):
             if lead and title:
                 self._log_activity('created', f"Task created: {title}", lead.id, request.user)
                 
+            try:
+                from users.models import Notification
+                from users.serializers import NotificationSerializer
+                from realtime.bus import emit_notification
+                
+                notification = Notification.objects.create(
+                    user=request.user,
+                    title="New Task Created",
+                    message=f"Task {task.title} was successfully added.",
+                    type="success",
+                    link="/tasks"
+                )
+                notif_data = NotificationSerializer(notification).data
+                emit_notification(request.user.id, notif_data)
+            except Exception as e:
+                logger.error(f"Failed to emit notification for task creation: {e}")
+
             serializer = self.get_serializer(task)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
@@ -184,6 +203,23 @@ class TaskViewSet(viewsets.ModelViewSet):
             metadata['call_started_at'] = timezone.now().isoformat()
             task.metadata = metadata
             task.save(update_fields=['status', 'is_active', 'metadata', 'assigned_to', 'active_by', 'updated_at'])
+
+            try:
+                from users.models import Notification
+                from users.serializers import NotificationSerializer
+                from realtime.bus import emit_notification
+                
+                notification = Notification.objects.create(
+                    user=request.user,
+                    title="Call Started",
+                    message=f"Call for task {task.title} has started.",
+                    type="info",
+                    link="/tasks"
+                )
+                notif_data = NotificationSerializer(notification).data
+                emit_notification(request.user.id, notif_data)
+            except Exception as e:
+                logger.error(f"Failed to emit notification for call start: {e}")
 
         serializer = self.get_serializer(task)
         return Response({'message': 'Call started.', 'task': serializer.data})
@@ -468,7 +504,8 @@ class TaskViewSet(viewsets.ModelViewSet):
 class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only API for ActivityLogs. Supports filtering by task."""
     serializer_class = ActivityLogSerializer
-    permission_classes = [RoleBasedAccessPermission]
+    permission_classes = [HasModulePermission]
+    rbac_module = 'task'
     filterset_fields = ['task', 'action_type']
     ordering_fields = ['timestamp']
 
@@ -476,13 +513,17 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return ActivityLog.objects.none()
+        if not user.role:
+            return ActivityLog.objects.none()
 
-        # Admin sees all; sales/manager sees logs for their tasks
-        if user.role == 'admin':
+        scope = user.role.data_scope
+
+        # Global scope sees all
+        if scope == 'global':
             return ActivityLog.objects.select_related('task', 'user').all()
 
-        # Filter via the tasks the user can see
-        if user.role == 'manager' and user.team:
+        # Team scope — logs for tasks in same team
+        if scope == 'team' and user.team:
             task_ids = Task.objects.filter(
                 assigned_to__team=user.team
             ).values_list('id', flat=True)

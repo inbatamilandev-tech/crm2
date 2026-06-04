@@ -9,6 +9,7 @@ import {
   useSensors,
   defaultDropAnimationSideEffects,
 } from '@dnd-kit/core';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   arrayMove,
   SortableContext,
@@ -21,7 +22,7 @@ import { restrictToWindowEdges } from '@dnd-kit/modifiers';
 import { dealsApi, contactsApi } from '../services/api';
 import confetti from 'canvas-confetti';
 import {
-  Plus, Loader2, Search, Briefcase,
+  Plus, Loader2, Search, Briefcase, Edit3
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -35,7 +36,7 @@ const STAGES = [
   { id: 'identify_decision_makers', title: 'Identify Decision Makers', color: 'bg-violet-500' },
   { id: 'proposal',                 title: 'Proposal/Price Quote',     color: 'bg-purple-500' },
   { id: 'negotiation',              title: 'Negotiation/Review',       color: 'bg-amber-500' },
-  { id: 'closed_won',               title: 'Closed Won',               color: 'bg-emerald-500' },
+  { id: 'Successfully Closed',      title: 'Successfully Closed',      color: 'bg-emerald-500' },
   { id: 'closed_lost',              title: 'Closed Lost',              color: 'bg-rose-500' },
   { id: 'closed_lost_to_competition', title: 'Closed Lost to Competition', color: 'bg-red-600' },
 ];
@@ -47,7 +48,7 @@ const PROBABILITY_MAP = {
   'identify_decision_makers': 40,
   'proposal': 60,
   'negotiation': 80,
-  'closed_won': 100,
+  'Successfully Closed': 100,
   'closed_lost': 0,
   'closed_lost_to_competition': 0
 };
@@ -68,7 +69,7 @@ const EMPTY_FORM = {
 };
 
 // ─── Memoized Deal Card Component ──────────────────────────────────────────────
-const DealCard = memo(({ deal, isOverlay = false }) => {
+const DealCard = memo(({ deal, isOverlay = false, onEdit }) => {
   const {
     attributes,
     listeners,
@@ -112,9 +113,20 @@ const DealCard = memo(({ deal, isOverlay = false }) => {
       }`}
     >
       <div className="flex justify-between items-start mb-2">
-        <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
+        <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug pr-2">
           {deal.name}
         </h4>
+        {!isOverlay && (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onEdit) onEdit(deal);
+            }}
+            className="text-slate-400 hover:text-blue-600 p-1.5 rounded-md hover:bg-blue-50 transition-colors shrink-0"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="flex items-center text-[11px] font-medium text-slate-500 mb-2">
         <Briefcase className="w-3 h-3 mr-1.5 opacity-50" />
@@ -174,7 +186,7 @@ const DealCard = memo(({ deal, isOverlay = false }) => {
 });
 
 // ─── Memoized Kanban Column Component ──────────────────────────────────────────
-const KanbanColumn = memo(({ column, deals, stageInfo, isOver }) => {
+const KanbanColumn = memo(({ column, deals, stageInfo, isOver, onEdit }) => {
   const colValue = useMemo(() => deals.reduce((s, d) => s + (d?.amount || 0), 0), [deals]);
 
   const {
@@ -188,7 +200,7 @@ const KanbanColumn = memo(({ column, deals, stageInfo, isOver }) => {
   });
 
   return (
-    <div className="w-[300px] flex-shrink-0 flex flex-col max-h-full">
+    <div className="w-[300px] flex-shrink-0 flex flex-col h-full min-h-0">
       <div className="mb-4 flex items-center justify-between px-1">
         <div className="flex flex-col">
           <div className="flex items-center space-x-2 mb-1">
@@ -219,7 +231,7 @@ const KanbanColumn = memo(({ column, deals, stageInfo, isOver }) => {
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={{ duration: 0.2 }}
               >
-                <DealCard deal={deal} />
+                <DealCard deal={deal} onEdit={onEdit} />
               </motion.div>
             ))}
           </AnimatePresence>
@@ -242,9 +254,33 @@ export default function Deals() {
 
   // ── New Deal modal state ────────────────────────────────────────────────────
   const [showModal, setShowModal]     = useState(false);
+  const [editingDealId, setEditingDealId] = useState(null);
   const [formData, setFormData]       = useState(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleEditClick = useCallback((deal) => {
+    setEditingDealId(deal.id);
+    setFormData({
+      title: deal.name,
+      contact: deal.contact_id || '',
+      value: deal.amount,
+      stage: deal.stage,
+      expected_close_date: deal.expectedClose !== 'TBD' ? deal.expectedClose : getFutureDate(30),
+    });
+    setShowModal(true);
+  }, []);
+
+  useEffect(() => {
+    if (location.pathname.endsWith('/new')) {
+      setFormData(EMPTY_FORM);
+      setShowModal(true);
+      navigate('/deals', { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   const { addToast } = useToast();
   const { lastMessage } = useWebSocket();
@@ -271,7 +307,7 @@ export default function Deals() {
     const stageMap = {
       'Proposal/Price Quote': 'proposal',
       'Negotiation/Review': 'negotiation',
-      'Closed Won': 'closed_won',
+      'Successfully Closed': 'Successfully Closed',
       'Closed Lost': 'closed_lost',
       'Closed Lost to Competition': 'closed_lost_to_competition',
       'Qualification': 'qualification',
@@ -293,6 +329,7 @@ export default function Deals() {
       dealsMap[id] = {
         id,
         name: deal.title,
+        contact_id: deal.contact,
         amount: parseFloat(deal.value || 0),
         company: deal.company_name || deal.contact_name || '—',
         owner: deal.owner_full_name || deal.owner_username || '?',
@@ -467,7 +504,7 @@ export default function Deals() {
 
     setIsSyncing(true);
     
-    if (finalStage === 'closed_won') {
+    if (finalStage === 'closed_won' || finalStage === 'Successfully Closed') {
       confetti({
         particleCount: 150,
         spread: 70,
@@ -507,15 +544,22 @@ export default function Deals() {
 
     setIsSubmitting(true);
     try {
-      await dealsApi.create({
+      const payload = {
         title: formData.title.trim(),
         contact: formData.contact,
         value: valueNum,
         stage: formData.stage,
         expected_close_date: formData.expected_close_date,
-      });
-      addToast('Deal created successfully');
+      };
+      if (editingDealId) {
+        await dealsApi.patch(editingDealId, payload);
+        addToast('Deal updated successfully', 'success');
+      } else {
+        await dealsApi.create(payload);
+        addToast('Deal created successfully', 'success');
+      }
       setShowModal(false);
+      setEditingDealId(null);
       setFormData(EMPTY_FORM);
       fetchDeals(searchQuery);
     } catch (err) {
@@ -546,9 +590,9 @@ export default function Deals() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in h-full flex flex-col max-w-[1800px] mx-auto pb-6">
+    <div className="animate-fade-in h-[calc(100vh-100px)] flex flex-col max-w-[1800px] mx-auto overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex-none flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Deals</h2>
           <div className="flex items-center mt-1 space-x-2">
@@ -580,7 +624,7 @@ export default function Deals() {
             />
           </div>
           <button
-            onClick={() => { setFormData(EMPTY_FORM); setShowModal(true); }}
+            onClick={() => { setEditingDealId(null); setFormData(EMPTY_FORM); setShowModal(true); }}
             className="inline-flex items-center px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-600/25 hover:bg-blue-700 hover:-translate-y-0.5 transition-all"
           >
             <Plus className="mr-2 w-4 h-4" />
@@ -590,7 +634,7 @@ export default function Deals() {
       </div>
 
       {/* Board */}
-      <div className="flex-1 overflow-x-auto pb-4 relative custom-scrollbar">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden pb-4 relative custom-scrollbar">
         {isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/50 z-20 backdrop-blur-[2px]">
             <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
@@ -605,7 +649,7 @@ export default function Deals() {
           onDragEnd={onDragEnd}
           modifiers={[restrictToWindowEdges]}
         >
-          <div className="flex space-x-5 h-full items-start min-w-max p-1">
+          <div className="flex space-x-5 h-full items-stretch min-w-max p-1">
             {data.columnOrder.map(columnId => {
               const column = data.columns[columnId];
               const deals = (column?.dealIds ?? []).map(id => data.deals[id]).filter(Boolean);
@@ -618,6 +662,7 @@ export default function Deals() {
                   deals={deals}
                   stageInfo={stageInfo}
                   isOver={activeDeal && (findColumn(activeDeal.id) === columnId)}
+                  onEdit={handleEditClick}
                 />
               );
             })}
@@ -633,14 +678,14 @@ export default function Deals() {
 
       {/* New Deal Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !isSubmitting && setShowModal(false)} />
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-10 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { if (!isSubmitting) { setShowModal(false); setEditingDealId(null); } }} />
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="bg-white rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden relative z-10 p-8"
           >
-            <h3 className="text-2xl font-black text-slate-900 mb-6">New Deal</h3>
+            <h3 className="text-2xl font-black text-slate-900 mb-6">{editingDealId ? 'Edit Deal' : 'New Deal'}</h3>
             <form onSubmit={handleCreateDeal} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Deal Title</label>
@@ -669,11 +714,11 @@ export default function Deals() {
                   disabled={isSubmitting} 
                   className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-sm shadow-lg shadow-blue-600/25 hover:bg-blue-700 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:translate-y-0"
                 >
-                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : 'Create Deal'}
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (editingDealId ? 'Save Changes' : 'Create Deal')}
                 </button>
                 <button 
                   type="button" 
-                  onClick={() => setShowModal(false)} 
+                  onClick={() => { setShowModal(false); setEditingDealId(null); }} 
                   className="px-6 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all"
                 >
                   Cancel

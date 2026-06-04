@@ -1,7 +1,7 @@
 import logging
 from rest_framework import viewsets
 
-from users.permissions import RoleBasedAccessPermission
+from users.permissions import HasModulePermission
 
 from .models import Deal, Product
 from .serializers import DealSerializer, ProductSerializer
@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 class DealViewSet(viewsets.ModelViewSet):
     serializer_class = DealSerializer
-    permission_classes = [RoleBasedAccessPermission]
+    permission_classes = [HasModulePermission]
+    rbac_module = 'deal'
     filterset_fields = ['stage']
     search_fields = ['title']
     ordering_fields = ['created_at', 'value']
@@ -37,15 +38,18 @@ class DealViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Deal.objects.none()
+        if not user.role:
+            return Deal.objects.none()
 
         base_qs = Deal.objects.select_related('owner', 'contact', 'account')
-        if user.role == 'admin':
+        scope = user.role.data_scope
+
+        if scope == 'global':
             return base_qs.all()
-        if user.role == 'manager':
+        if scope == 'team':
             return base_qs.filter(owner__team=user.team) if user.team else base_qs.none()
-        if user.role == 'sales':
-            return base_qs.filter(owner=user)
-        return base_qs.none()
+        # 'own' scope
+        return base_qs.filter(owner=user)
 
     def perform_create(self, serializer):
         from django.db import transaction
@@ -81,6 +85,23 @@ class DealViewSet(viewsets.ModelViewSet):
                 lead.deal_required_at = None
                 lead.save(update_fields=['deal_required', 'deal_required_at'])
 
+            try:
+                from users.models import Notification
+                from users.serializers import NotificationSerializer
+                from realtime.bus import emit_notification
+                
+                notification = Notification.objects.create(
+                    user=self.request.user,
+                    title="New Deal Created",
+                    message=f"Deal {deal.title} was successfully added.",
+                    type="success",
+                    link="/deals"
+                )
+                notif_data = NotificationSerializer(notification).data
+                emit_notification(self.request.user.id, notif_data)
+            except Exception as e:
+                logger.error(f"Failed to emit notification for deal creation: {e}")
+
     def perform_update(self, serializer):
         from django.db import transaction
         with transaction.atomic():
@@ -90,7 +111,47 @@ class DealViewSet(viewsets.ModelViewSet):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('name')
     serializer_class = ProductSerializer
-    permission_classes = [RoleBasedAccessPermission]
+    from rest_framework.permissions import IsAuthenticated
+    permission_classes = [IsAuthenticated]
     filterset_fields = ['category', 'service_type', 'is_active', 'featured']
     search_fields = ['name', 'sku', 'description']
     ordering_fields = ['name', 'price', 'created_at']
+
+    def destroy(self, request, *args, **kwargs):
+        from django.db.models import ProtectedError
+        from rest_framework.response import Response
+        from rest_framework import status
+
+        instance = self.get_object()
+        try:
+            instance.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ProtectedError:
+            return Response(
+                {
+                    "detail": (
+                        f"Cannot delete '{instance.name}' because it is linked to one or more quotes. "
+                        "Please remove it from all quotes first, or deactivate it instead."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+    def perform_create(self, serializer):
+        product = serializer.save()
+        try:
+            from users.models import Notification
+            from users.serializers import NotificationSerializer
+            from realtime.bus import emit_notification
+            
+            notification = Notification.objects.create(
+                user=self.request.user,
+                title="New Service Created",
+                message=f"Service/Product '{product.name}' was successfully added to the catalog.",
+                type="success",
+                link="/products"
+            )
+            notif_data = NotificationSerializer(notification).data
+            emit_notification(self.request.user.id, notif_data)
+        except Exception as e:
+            logger.error(f"Failed to emit notification for product creation: {e}")

@@ -54,6 +54,8 @@ class Lead(models.Model):
         ('direct', 'Direct Call'),
         ('email', 'Email Campaign'),
         ('seo', 'SEO / Organic'),
+        ('cold_call', 'Cold Call'),
+        ('social_media', 'Social Media'),
         ('other', 'Other'),
     )
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='other', blank=True, null=True)

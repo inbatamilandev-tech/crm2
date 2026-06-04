@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { workflowsApi } from '../../../services/api';
 import { INPUT_STYLE } from '../../../utils/themeUtils';
+import ConfirmationDialog from '../../../components/ConfirmationDialog';
 
 // --- CONFIGURATION SCHEMAS --- //
 const MODULES = ['lead', 'deal', 'task', 'contact', 'invoice', 'case'];
@@ -51,6 +52,7 @@ export default function WorkflowBuilder() {
   });
   const [conditions, setConditions] = useState([]);
   const [actions, setActions] = useState([]);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   useEffect(() => {
     if (isEdit) {
@@ -86,17 +88,29 @@ export default function WorkflowBuilder() {
   };
 
   const handlePublish = async () => {
-    if (!window.confirm("Publishing will make this version active and archive the previous version. Proceed?")) return;
-    try {
-      setSaving(true);
-      await workflowsApi.publish(id);
-      fetchWorkflow(); // Refresh to get PUBLISHED status
-    } catch (error) {
-      console.error("Failed to publish", error);
-      alert("Failed to publish workflow.");
-    } finally {
-      setSaving(false);
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Publish Workflow",
+      description: "Publishing will make this version active and archive the previous version. Proceed?",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          setSaving(true);
+          await workflowsApi.publish(id);
+          fetchWorkflow(); // Refresh to get PUBLISHED status
+        } catch (error) {
+          console.error("Failed to publish", error);
+          setDialogConfig({
+            isOpen: true,
+            title: "Error",
+            description: "Failed to publish workflow.",
+            onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+          });
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   const handleCreateDraft = async () => {
@@ -107,7 +121,12 @@ export default function WorkflowBuilder() {
       window.location.reload(); // Quick refresh to load new ID
     } catch (error) {
       console.error("Failed to create draft", error);
-      alert("Failed to create draft.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Error",
+        description: "Failed to create draft.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } finally {
       setSaving(false);
     }
@@ -124,14 +143,24 @@ export default function WorkflowBuilder() {
 
       if (isEdit) {
         await workflowsApi.update(id, payload);
-        alert('Draft saved successfully!');
+        setDialogConfig({
+          isOpen: true,
+          title: "Success",
+          description: "Draft saved successfully!",
+          onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+        });
       } else {
         const res = await workflowsApi.create(payload);
         navigate(`/settings/workflows/${res.id}`);
       }
     } catch (error) {
       console.error("Failed to save workflow", error);
-      alert("Validation Error: Please ensure all required fields are filled out.");
+      setDialogConfig({
+        isOpen: true,
+        title: "Validation Error",
+        description: "Please ensure all required fields are filled out.",
+        onConfirm: () => setDialogConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } finally {
       setSaving(false);
     }
@@ -577,6 +606,15 @@ export default function WorkflowBuilder() {
 
         </div>
       </div>
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="OK"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

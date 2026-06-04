@@ -12,6 +12,7 @@ from django.contrib.auth import get_user_model
 from .models import Activity, Meeting, Call, Comment, Mention
 from .serializers import ActivitySerializer, MeetingSerializer, CallSerializer, CommentSerializer
 from users.models import Notification
+from users.permissions import HasModulePermission
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -71,15 +72,37 @@ class CommentViewSet(viewsets.ModelViewSet):
 class ActivityViewSet(viewsets.ModelViewSet):
     queryset = Activity.objects.all()
     serializer_class = ActivitySerializer
+    permission_classes = [IsAuthenticated]
     filterset_fields = ['type']
     search_fields = ['notes']
     ordering_fields = ['created_at']
 
 class MeetingViewSet(viewsets.ModelViewSet):
-    queryset = Meeting.objects.all().order_by('-created_at')
     serializer_class = MeetingSerializer
+    permission_classes = [HasModulePermission]
+    rbac_module = 'meeting'
     search_fields = ['title', 'notes']
     ordering_fields = ['created_at', 'start_time']
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Meeting.objects.none()
+        if not user.role:
+            return Meeting.objects.none()
+
+        scope = user.role.data_scope
+        base_qs = Meeting.objects.all().order_by('-created_at')
+
+        if scope == 'global':
+            return base_qs
+        if scope == 'team':
+            return base_qs.filter(owner__team=user.team) if user.team else Meeting.objects.none()
+        # 'own' scope
+        return base_qs.filter(owner=user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
 
 class CallViewSet(viewsets.ModelViewSet):
     serializer_class = CallSerializer

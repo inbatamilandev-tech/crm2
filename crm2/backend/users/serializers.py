@@ -18,8 +18,8 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ('id',)
 
     def get_permissions(self, obj):
-        if obj.role_fk:
-            return list(obj.role_fk.permissions.values_list('name', flat=True))
+        if obj.role:
+            return list(obj.role.permissions.values_list('name', flat=True))
         return []
 
     def update(self, instance, validated_data):
@@ -44,17 +44,35 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('id', 'username', 'email', 'password', 'role', 'first_name', 'last_name')
+        extra_kwargs = {
+            'username': {'validators': []}  # Remove default unique validator — we handle it manually below
+        }
 
     def create(self, validated_data):
+        role_instance = validated_data.pop('role', None)
+        base_username = validated_data['username']
+
+        # Auto-generate a unique username if the base one is already taken
+        username = base_username
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+
         user = User.objects.create_user(
-            username=validated_data['username'],
+            username=username,
             email=validated_data.get('email', ''),
             password=validated_data['password'],
-            role=validated_data.get('role', 'sales'),
+            role=role_instance,
             first_name=validated_data.get('first_name', ''),
             last_name=validated_data.get('last_name', '')
         )
         return user
+
+class PermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ('id', 'name', 'description')
 
 class CompanyProfileSerializer(serializers.ModelSerializer):
     class Meta:
@@ -69,7 +87,8 @@ class RoleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Role
-        fields = ('id', 'name', 'scope', 'permissions', 'permissions_list')
+        fields = ('id', 'name', 'data_scope', 'permissions', 'permissions_list', 'created_at')
+        read_only_fields = ('created_at',)
 
     def get_permissions(self, obj):
         return list(obj.permissions.values_list('name', flat=True))
@@ -186,3 +205,4 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = '__all__'
+        read_only_fields = ('user',)

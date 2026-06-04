@@ -56,10 +56,12 @@ class MeetingSerializer(serializers.ModelSerializer):
         read_only_fields = ['owner', 'created_at']
 
     def get_date(self, obj):
-        return obj.start_time.strftime('%Y-%m-%d') if obj.start_time else None
+        from django.utils import timezone
+        return timezone.localtime(obj.start_time).strftime('%Y-%m-%d') if obj.start_time else None
 
     def get_time(self, obj):
-        return obj.start_time.strftime('%H:%M') if obj.start_time else None
+        from django.utils import timezone
+        return timezone.localtime(obj.start_time).strftime('%H:%M') if obj.start_time else None
 
 class CallSerializer(serializers.ModelSerializer):
     direction_display = serializers.CharField(source='get_direction_display', read_only=True)

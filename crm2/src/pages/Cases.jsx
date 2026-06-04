@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import api, { casesApi, contactsApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Cases() {
   const { addToast } = useToast();
@@ -26,6 +27,7 @@ export default function Cases() {
   const [contacts, setContacts] = useState([]); // For dropdown
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const fetchCases = () => {
     setLoading(true);
@@ -206,16 +208,23 @@ export default function Cases() {
   };
 
   const handleDeleteCase = (id) => {
-    if (!window.confirm('Are you sure you want to delete this case?')) return;
-    casesApi.delete(id)
-    .then(res => {
-      fetchCases();
-      addToast('Case deleted successfully', 'success');
-      setActiveDropdown(null);
-    })
-    .catch(err => {
-      console.error(err);
-      addToast('Failed to delete case', 'error');
+    setDialogConfig({
+      isOpen: true,
+      title: "Delete Record",
+      description: "Are you sure you want to delete this record? This action cannot be undone.",
+      onConfirm: () => {
+        setDialogConfig({ ...dialogConfig, isOpen: false });
+        casesApi.delete(id)
+        .then(res => {
+          fetchCases();
+          addToast('Case deleted successfully', 'success');
+          setActiveDropdown(null);
+        })
+        .catch(err => {
+          console.error(err);
+          addToast('Failed to delete case', 'error');
+        });
+      }
     });
   };
 
@@ -299,10 +308,10 @@ export default function Cases() {
         </div>
       ) : viewMode === 'table' ? (
         <div className="bg-white/80 backdrop-blur-xl border border-slate-100 rounded-3xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)]">
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
+              <thead className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md shadow-sm border-b border-slate-100">
+                <tr>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Case ID</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Subject</th>
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Customer</th>
@@ -649,6 +658,15 @@ export default function Cases() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Delete"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

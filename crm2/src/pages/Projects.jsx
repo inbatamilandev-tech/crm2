@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { projectsApi, accountsApi, dealsApi } from '../services/api';
 import { useToast } from '../context/ToastContext';
+import ConfirmationDialog from '../components/ConfirmationDialog';
 
 export default function Projects() {
   const [projects, setProjects] = useState([]);
@@ -24,6 +25,7 @@ export default function Projects() {
   const [currentProjectId, setCurrentProjectId] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [deals, setDeals] = useState([]);
+  const [dialogConfig, setDialogConfig] = useState({ isOpen: false, title: '', description: '', onConfirm: null });
 
   const closeModal = () => {
     setIsModalOpen(false);
@@ -107,14 +109,21 @@ export default function Projects() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Archive and purge this project lifecycle?")) return;
-    try {
-      await projectsApi.delete(id);
-      addToast("Lifecycle purged");
-      fetchProjects();
-    } catch (err) {
-      addToast("Purge failed", "error");
-    }
+    setDialogConfig({
+      isOpen: true,
+      title: "Archive Project",
+      description: "Archive and purge this project lifecycle? This action cannot be undone.",
+      onConfirm: async () => {
+        setDialogConfig(prev => ({ ...prev, isOpen: false }));
+        try {
+          await projectsApi.delete(id);
+          addToast("Lifecycle purged");
+          fetchProjects();
+        } catch (err) {
+          addToast("Purge failed", "error");
+        }
+      }
+    });
   };
 
   const filteredProjects = projects.filter(p => p.name?.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -257,10 +266,10 @@ export default function Projects() {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-sm overflow-hidden [&>div.overflow-x-auto]:max-h-[calc(100vh-150px)] [&>div.overflow-x-auto]:overflow-y-auto">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left text-slate-500">
-                <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100">
+              <table className="w-full text-sm text-left text-slate-500 relative">
+                <thead className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 border-b border-slate-100 sticky top-0 z-20 shadow-sm">
                   <tr>
                     <th className="px-6 py-4">Project Name</th>
                     <th className="px-6 py-4">Status</th>
@@ -301,7 +310,7 @@ export default function Projects() {
                         {project.deal_display || 'N/A'}
                       </td>
                       <td className="px-6 py-4 text-xs font-bold text-slate-400">
-                        {project.budget ? `$${project.budget}` : 'N/A'}
+                        {project.budget ? `₹${project.budget}` : 'N/A'}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <button onClick={() => handleEditClick(project)} className="text-slate-400 hover:text-blue-500 hover:bg-blue-50 p-1.5 rounded-lg transition-colors mr-2">
@@ -411,6 +420,15 @@ export default function Projects() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={dialogConfig.isOpen}
+        title={dialogConfig.title}
+        description={dialogConfig.description}
+        confirmText="Archive"
+        onConfirm={dialogConfig.onConfirm}
+        onCancel={() => setDialogConfig({ ...dialogConfig, isOpen: false })}
+      />
     </div>
   );
 }

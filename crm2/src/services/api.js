@@ -177,6 +177,11 @@ export const notificationsApi = {
     const response = await api.get('/notifications/', { params });
     return response.data;
   },
+  create: async (data) => {
+    const response = await api.post('/notifications/', data);
+    window.dispatchEvent(new Event('notification-added'));
+    return response.data;
+  },
   markAsRead: async (id) => {
     const response = await api.post(`/notifications/${id}/read/`);
     return response.data;

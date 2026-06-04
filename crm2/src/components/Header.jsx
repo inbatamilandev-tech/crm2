@@ -9,7 +9,17 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket } from '../context/WebSocketContext';
-import { notificationsApi } from '../services/api';
+import { 
+  notificationsApi, 
+  leadsApi, 
+  dealsApi, 
+  contactsApi, 
+  accountsApi, 
+  tasksApi, 
+  callsApi, 
+  meetingsApi, 
+  invoicesApi 
+} from '../services/api';
 
 const QUICK_ACTIONS = [
   { label: 'New Lead', icon: <UserPlus className="w-4 h-4" />, path: '/leads/new' },
@@ -17,6 +27,40 @@ const QUICK_ACTIONS = [
   { label: 'New Deal', icon: <Briefcase className="w-4 h-4" />, path: '/deals/new' },
   { label: 'Activity Hub', icon: <Activity className="w-4 h-4" />, path: '/activity-hub' },
 ];
+
+const QUICK_LINKS = {
+  'dashboard': '/',
+  'workqueue': '/workqueue',
+  'leads': '/leads',
+  'contacts': '/contacts',
+  'accounts': '/accounts',
+  'deals': '/deals',
+  'tasks': '/tasks',
+  'calls': '/calls',
+  'emails': '/emails',
+  'meetings': '/meetings',
+  'overview': '/marketing',
+  'campaigns': '/marketing#campaigns',
+  'lead capture': '/marketing#capture',
+  'ads analytics': '/analytics',
+  'analytics': '/analytics',
+  'products': '/products',
+  'product': '/products',
+  'inventory': '/products',
+  'inventroy': '/products',
+  'quotes': '/quotes',
+  'qoutes': '/quotes',
+  'invoices': '/invoices',
+  'support': '/support',
+  'cases': '/cases',
+  'solutions': '/solutions',
+  'services': '/services',
+  'feedback': '/feedback',
+  'projects': '/projects',
+  'project': '/projects',
+  'settings': '/settings',
+  'setting': '/settings',
+};
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -27,12 +71,61 @@ export default function Header() {
   const [showProfile, setShowProfile] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
   const searchRef = useRef(null);
   const navigate = useNavigate();
 
-  const handleSearch = (e) => {
+  const handleSearch = async (e) => {
     if (e.key === 'Enter') {
-      console.log("Searching for:", searchQuery);
+      const query = searchQuery.trim().toLowerCase();
+      if (!query) {
+        setSearchResults(null);
+        return;
+      }
+      
+      // Quick Navigation Redirect
+      if (QUICK_LINKS[query]) {
+        navigate(QUICK_LINKS[query]);
+        setSearchResults(null);
+        setSearchQuery('');
+        return;
+      }
+      
+      setIsSearching(true);
+      setSearchResults(null);
+      try {
+        const [
+          leadsRes, dealsRes, contactsRes, accountsRes,
+          tasksRes, callsRes, meetingsRes, invoicesRes
+        ] = await Promise.all([
+          leadsApi.getAll({ search: searchQuery }).catch(() => []),
+          dealsApi.getAll({ search: searchQuery }).catch(() => []),
+          contactsApi.getAll({ search: searchQuery }).catch(() => []),
+          accountsApi.getAll({ search: searchQuery }).catch(() => []),
+          tasksApi.getAll({ search: searchQuery }).catch(() => []),
+          callsApi.getAll({ search: searchQuery }).catch(() => []),
+          meetingsApi.getAll({ search: searchQuery }).catch(() => []),
+          invoicesApi.getAll({ search: searchQuery }).catch(() => [])
+        ]);
+        
+        const extract = (res) => (res?.results || res || []).slice(0, 3);
+        
+        setSearchResults({
+          leads: extract(leadsRes),
+          deals: extract(dealsRes),
+          contacts: extract(contactsRes),
+          accounts: extract(accountsRes),
+          tasks: extract(tasksRes),
+          calls: extract(callsRes),
+          meetings: extract(meetingsRes),
+          invoices: extract(invoicesRes)
+        });
+      } catch (err) {
+        console.error("Search failed", err);
+      } finally {
+        setIsSearching(false);
+      }
     }
   };
 
@@ -60,6 +153,16 @@ export default function Header() {
 
   useEffect(() => {
     fetchNotifications();
+    
+    const handleNotificationAdded = () => {
+      fetchNotifications();
+    };
+    
+    window.addEventListener('notification-added', handleNotificationAdded);
+    
+    return () => {
+      window.removeEventListener('notification-added', handleNotificationAdded);
+    };
   }, [fetchNotifications]);
 
   const handleMarkRead = async (id) => {
@@ -81,33 +184,143 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-[#F8FAFC]/80 backdrop-blur-md border-b border-[#0F172A]/10 h-20 flex items-center justify-between px-8 z-30 sticky top-0 shadow-sm">
+    <header className="bg-[#F8FAFC]/80 dark:bg-slate-900/90 backdrop-blur-md border-b border-[#0F172A]/10 dark:border-white/10 h-20 flex items-center justify-between px-8 z-30 sticky top-0 shadow-sm">
       {/* Universal Search Command */}
       <div className="flex-1 flex">
         <div className="relative w-full max-w-xl group">
-          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
             <Search className="h-4 w-4 text-[#0F172A]/50 group-focus-within:text-[#0F172A] transition-colors" />
           </div>
           <input
             ref={searchRef}
-            className="block w-full pl-12 pr-14 py-3 border border-[#0F172A]/10 rounded-2xl leading-5 bg-[#0F172A]/5 placeholder:text-[#0F172A]/50 focus:outline-none focus:bg-[#F8FAFC] focus:border-[#0F172A] focus:ring-4 focus:ring-[#0F172A]/5 sm:text-sm transition-all"
+            className="block w-full pl-12 pr-14 py-3 border border-[#0F172A]/10 dark:border-white/10 rounded-2xl leading-5 bg-[#0F172A]/5 dark:bg-white/5 text-[#0F172A] dark:text-slate-100 placeholder:text-[#0F172A]/50 dark:placeholder:text-white/40 focus:outline-none focus:bg-[#F8FAFC] dark:focus:bg-slate-800 focus:border-[#0F172A] dark:focus:border-white/30 focus:ring-4 focus:ring-[#0F172A]/5 dark:focus:ring-white/5 sm:text-sm transition-all relative z-10"
             placeholder="Search leads, deals, contacts… (Ctrl+K)"
             type="search"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={e => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults(null); }}
             onKeyDown={handleSearch}
           />
-          <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
-             <div className="flex items-center space-x-1 px-2 py-1 bg-slate-100 rounded-lg text-[9px] font-black text-[#0F172A]/50 border border-slate-200 uppercase tracking-widest">
+          <div className="absolute inset-y-0 right-0 pr-4 flex items-center z-10">
+             <div className="flex items-center space-x-1 px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-[9px] font-black text-[#0F172A]/50 dark:text-slate-300 border border-slate-200 dark:border-white/10 uppercase tracking-widest">
                 <Command className="w-3 h-3" />
                 <span>K</span>
              </div>
           </div>
+
+          {(isSearching || searchResults) && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => { setSearchResults(null); setIsSearching(false); }} />
+              <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-slate-800 border border-[#0F172A]/10 dark:border-white/10 shadow-2xl rounded-2xl z-50 max-h-[400px] overflow-y-auto overflow-x-hidden p-2">
+                {isSearching ? (
+                  <div className="text-center py-6 text-sm text-[#0F172A]/50 dark:text-slate-400 font-bold flex items-center justify-center">
+                    <Search className="w-4 h-4 animate-spin mr-2" /> Searching...
+                  </div>
+                ) : (
+                  <>
+                    {searchResults?.leads?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Leads</h4>
+                        {searchResults.leads.map(lead => (
+                          <div key={`lead-${lead.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/leads?id=${lead.id}`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{lead.name || `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Unnamed Lead'}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{lead.email || lead.phone || 'No contact info'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.contacts?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Contacts</h4>
+                        {searchResults.contacts.map(contact => (
+                          <div key={`contact-${contact.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/contacts`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{contact.name || `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Unnamed Contact'}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{contact.email || contact.phone || 'No contact info'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.accounts?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Accounts</h4>
+                        {searchResults.accounts.map(account => (
+                          <div key={`account-${account.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/accounts`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{account.name || account.account_name || account.company_name || 'Unnamed Account'}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{account.industry || 'No industry specified'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.deals?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Deals</h4>
+                        {searchResults.deals.map(deal => (
+                          <div key={`deal-${deal.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/deals`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{deal.title || deal.name || 'Unnamed Deal'}</p>
+                            <p className="text-[11px] text-slate-400">Value: ₹{deal.value || 0} • Stage: {deal.stage || 'Unknown'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.tasks?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Tasks</h4>
+                        {searchResults.tasks.map(task => (
+                          <div key={`task-${task.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/tasks`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{task.title || task.name || 'Unnamed Task'}</p>
+                            <p className="text-[11px] text-slate-400">Status: {task.status || 'Pending'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.calls?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Calls</h4>
+                        {searchResults.calls.map(call => (
+                          <div key={`call-${call.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/calls`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{call.subject || call.title || 'Log a call'}</p>
+                            <p className="text-[11px] text-slate-400">Outcome: {call.outcome || 'Pending'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.meetings?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Meetings</h4>
+                        {searchResults.meetings.map(meeting => (
+                          <div key={`meeting-${meeting.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/meetings`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{meeting.title || meeting.subject || 'Meeting'}</p>
+                            <p className="text-[11px] text-slate-400">Time: {meeting.date || meeting.start_time || 'Scheduled'}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults?.invoices?.length > 0 && (
+                      <div className="mb-3">
+                        <h4 className="text-[10px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest px-2 mb-1.5">Invoices</h4>
+                        {searchResults.invoices.map(invoice => (
+                          <div key={`invoice-${invoice.id}`} className="px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl cursor-pointer transition-colors" onClick={() => { navigate(`/invoices`); setSearchResults(null); }}>
+                            <p className="text-[13px] font-bold text-slate-700 dark:text-slate-200">{invoice.invoice_number || invoice.number || invoice.title || 'Invoice'}</p>
+                            <p className="text-[11px] text-slate-400">Amount: ₹{invoice.amount || invoice.total || 0}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(!searchResults?.leads?.length && !searchResults?.deals?.length && !searchResults?.contacts?.length && !searchResults?.accounts?.length && !searchResults?.tasks?.length && !searchResults?.calls?.length && !searchResults?.meetings?.length && !searchResults?.invoices?.length) && (
+                      <div className="text-center py-6 text-[13px] text-slate-500 font-medium">
+                        No results found for "{searchQuery}"
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
       
       {/* Operational Tools */}
       <div className="ml-8 flex items-center space-x-3">
+        {/* 
         <div className="flex items-center space-x-1 px-2 py-1 bg-[#0F172A]/5 border border-[#0F172A]/10 rounded-2xl mr-4">
            <button onClick={() => navigate('/leads')} className="p-2.5 rounded-xl text-[#0F172A]/50 hover:text-[#0F172A] hover:bg-[#F8FAFC] transition-all">
             <Globe className="h-4 w-4" />
@@ -134,6 +347,7 @@ export default function Header() {
             <Settings className="h-4 w-4" />
           </button>
         </div>
+        */}
 
         {/* Intelligence Alert System */}
         <div className="relative">
@@ -198,24 +412,24 @@ export default function Header() {
           )}
         </div>
 
-        <div className="h-10 w-px bg-slate-100 mx-2"></div>
+        <div className="h-10 w-px bg-slate-100 dark:bg-white/10 mx-2"></div>
 
         {/* Realtime Infrastructure Status */}
-        <div className="flex items-center space-x-3 px-3 py-1.5 bg-white border border-[#0F172A]/10 rounded-2xl shadow-sm">
+        <div className="flex items-center space-x-3 px-3 py-1.5 bg-white dark:bg-slate-800 border border-[#0F172A]/10 dark:border-white/10 rounded-2xl shadow-sm">
            <div className="flex items-center space-x-2">
               <div className={`w-2 h-2 rounded-full ${
                 status === 'connected' ? 'bg-emerald-500 animate-pulse' : 
                 status === 'reconnecting' ? 'bg-amber-500 animate-bounce' :
                 status === 'degraded' ? 'bg-rose-500' : 'bg-slate-300'
               }`} />
-              <span className="text-[9px] font-black uppercase tracking-widest text-[#0F172A]/50">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#0F172A]/50 dark:text-slate-400">
                 {status === 'connected' ? 'Realtime Matrix' : status}
               </span>
            </div>
            {status === 'connected' && (
-             <div className="flex items-center space-x-1.5 border-l border-slate-100 pl-3">
-                <Activity className="w-3 h-3 text-[#095D95]/40" />
-                <span className="text-[9px] font-black text-[#0F172A]/40">{latency}ms</span>
+             <div className="flex items-center space-x-1.5 border-l border-slate-100 dark:border-white/10 pl-3">
+                <Activity className="w-3 h-3 text-[#095D95]/40 dark:text-slate-500" />
+                <span className="text-[9px] font-black text-[#0F172A]/40 dark:text-slate-400">{latency}ms</span>
              </div>
            )}
         </div>
@@ -226,7 +440,7 @@ export default function Header() {
         <div className="relative">
           <button 
             onClick={() => setShowProfile(!showProfile)}
-            className="flex items-center space-x-4 pl-3 pr-2 py-2 bg-[#0F172A]/5 hover:bg-slate-100 rounded-2xl transition-all border border-transparent hover:border-slate-200"
+            className="flex items-center space-x-4 pl-3 pr-2 py-2 bg-[#0F172A]/5 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 rounded-2xl transition-all border border-transparent hover:border-slate-200 dark:hover:border-white/10"
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white text-sm font-black shadow-lg shadow-blue-600/20 overflow-hidden">
               {user?.avatar ? (
@@ -236,42 +450,42 @@ export default function Header() {
               )}
             </div>
             <div className="hidden lg:flex flex-col items-start pr-2">
-              <span className="text-xs font-black text-slate-900 leading-none">
+              <span className="text-xs font-black text-slate-900 dark:text-slate-100 leading-none">
                 {user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : (user?.username || 'Operator')}
               </span>
-              <span className="text-[9px] text-[#0F172A]/50 font-black uppercase tracking-widest mt-1.5 flex items-center">
+              <span className="text-[9px] text-[#0F172A]/50 dark:text-slate-400 font-black uppercase tracking-widest mt-1.5 flex items-center">
                  <ShieldCheck className="w-3 h-3 mr-1 text-emerald-500" />
                  Verified
               </span>
             </div>
-            <ChevronDown className={`w-3.5 h-3.5 text-[#0F172A]/50 transition-transform duration-300 ${showProfile ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3.5 h-3.5 text-[#0F172A]/50 dark:text-slate-400 transition-transform duration-300 ${showProfile ? 'rotate-180' : ''}`} />
           </button>
 
           {showProfile && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowProfile(false)} />
-              <div className="absolute right-0 mt-4 w-64 bg-[#F8FAFC] border border-[#0F172A]/10 shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-[32px] z-50 overflow-hidden animate-fade-in p-2">
-                <div className="px-5 py-4 border-b border-slate-50 mb-1">
-                  <p className="text-[9px] font-black text-[#0F172A]/50 uppercase tracking-widest">Operator Context</p>
+              <div className="absolute right-0 mt-4 w-64 bg-[#F8FAFC] dark:bg-slate-800 border border-[#0F172A]/10 dark:border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-[32px] z-50 overflow-hidden animate-fade-in p-2">
+                <div className="px-5 py-4 border-b border-slate-50 dark:border-white/5 mb-1">
+                  <p className="text-[9px] font-black text-[#0F172A]/50 dark:text-slate-400 uppercase tracking-widest">Operator Context</p>
                 </div>
                 <div className="space-y-1">
                   <button 
                     onClick={() => { navigate('/profile'); setShowProfile(false); }}
-                    className="w-full text-left px-4 py-3 text-[11px] font-black text-slate-600 uppercase tracking-widest hover:bg-[#0F172A]/5 rounded-2xl flex items-center transition-all group"
+                    className="w-full text-left px-4 py-3 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest hover:bg-[#0F172A]/5 dark:hover:bg-white/5 rounded-2xl flex items-center transition-all group"
                   >
-                    <User className="w-4 h-4 mr-3 text-[#0F172A]/50 group-hover:text-[#0F172A]" /> Identity Matrix
+                    <User className="w-4 h-4 mr-3 text-[#0F172A]/50 dark:text-slate-400 group-hover:text-[#0F172A] dark:group-hover:text-white" /> Identity Matrix
                   </button>
                   <button 
                     onClick={() => { navigate('/settings'); setShowProfile(false); }}
-                    className="w-full text-left px-4 py-3 text-[11px] font-black text-slate-600 uppercase tracking-widest hover:bg-[#0F172A]/5 rounded-2xl flex items-center transition-all group"
+                    className="w-full text-left px-4 py-3 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-widest hover:bg-[#0F172A]/5 dark:hover:bg-white/5 rounded-2xl flex items-center transition-all group"
                   >
-                    <Settings className="w-4 h-4 mr-3 text-[#0F172A]/50 group-hover:text-[#0F172A]" /> Logic Control
+                    <Settings className="w-4 h-4 mr-3 text-[#0F172A]/50 dark:text-slate-400 group-hover:text-[#0F172A] dark:group-hover:text-white" /> Logic Control
                   </button>
                 </div>
-                <div className="h-px bg-[#0F172A]/5 my-2 mx-4" />
+                <div className="h-px bg-[#0F172A]/5 dark:bg-white/10 my-2 mx-4" />
                 <button 
                   onClick={logout}
-                  className="w-full text-left px-4 py-3 text-[11px] font-black text-rose-600 uppercase tracking-widest hover:bg-rose-50 rounded-2xl flex items-center transition-all group"
+                  className="w-full text-left px-4 py-3 text-[11px] font-black text-rose-600 uppercase tracking-widest hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-2xl flex items-center transition-all group"
                 >
                   <LogOut className="w-4 h-4 mr-3 text-rose-400" /> Flush Session
                 </button>

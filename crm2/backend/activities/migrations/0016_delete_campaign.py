@@ -7,6 +7,9 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('activities', '0015_marketing_attribution'),
+        ('tasks', '0022_alter_task_campaign'),
+        ('deals', '0017_alter_deal_campaign'),
+        ('leads', '0013_alter_lead_campaign'),
     ]
 
     operations = [

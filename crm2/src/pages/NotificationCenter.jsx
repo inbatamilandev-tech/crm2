@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { notificationsApi } from '../../services/api';
-import { Bell, Check, Trash2, Shield, Info, AlertTriangle, CheckCircle, Clock, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { notificationsApi } from '../services/api';
+import { Bell, Check, Trash2, Shield, Info, AlertTriangle, CheckCircle, Clock, ChevronRight, Search } from 'lucide-react';
 
 export default function NotificationCenter() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredNotifications = notifications.filter(n => 
+    (n.title && n.title.toLowerCase().includes(searchQuery.toLowerCase())) || 
+    (n.message && n.message.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   useEffect(() => {
     fetchNotifications();
@@ -79,15 +87,27 @@ export default function NotificationCenter() {
           <p className="text-sm text-slate-500 font-medium">Stay updated with real-time alerts, workflow updates, and system activities.</p>
         </div>
 
-        {unreadCount > 0 && (
-          <button 
-            onClick={handleMarkAllRead}
-            className="flex items-center space-x-2 px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-sm"
-          >
-            <Check className="w-3.5 h-3.5" />
-            <span>Mark all as read</span>
-          </button>
-        )}
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full sm:w-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search notifications..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#095D95] transition-all shadow-sm w-full sm:w-64"
+            />
+          </div>
+          {unreadCount > 0 && (
+            <button 
+              onClick={handleMarkAllRead}
+              className="flex items-center justify-center space-x-2 px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-50 dark:hover:bg-white/10 transition-all shadow-sm whitespace-nowrap w-full sm:w-auto"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Mark all as read</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-800/50 rounded-3xl border border-slate-200 dark:border-white/5 shadow-xl shadow-slate-200/20 dark:shadow-none overflow-hidden">
@@ -104,9 +124,17 @@ export default function NotificationCenter() {
             <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">You're all caught up!</h3>
             <p className="text-sm text-slate-500 mt-2 max-w-xs">No new notifications at the moment. We'll alert you when something important happens.</p>
           </div>
+        ) : filteredNotifications.length === 0 ? (
+          <div className="p-20 text-center flex flex-col items-center">
+            <div className="w-20 h-20 bg-slate-50 dark:bg-white/5 rounded-full flex items-center justify-center mb-6">
+              <Search className="w-10 h-10 text-slate-200" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">No results found</h3>
+            <p className="text-sm text-slate-500 mt-2 max-w-xs">Try adjusting your search query.</p>
+          </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-white/5">
-            {notifications.map((n) => (
+            {filteredNotifications.map((n) => (
               <div 
                 key={n.id} 
                 className={`p-6 md:p-8 flex items-start justify-between hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all group ${!n.is_read ? 'bg-[#D2E7E7]/10 dark:bg-[#50B1B9]/5' : ''}`}
@@ -163,7 +191,9 @@ export default function NotificationCenter() {
           <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Notification Settings</h4>
           <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Customize how you receive alerts across devices.</p>
         </div>
-        <button className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 text-[10px] font-black uppercase tracking-widest rounded-xl hover:shadow-md transition-all">
+        <button 
+          onClick={() => navigate('/settings')}
+          className="px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 text-[10px] font-black uppercase tracking-widest rounded-xl hover:shadow-md transition-all">
           Manage Preferences
         </button>
       </div>

@@ -139,7 +139,7 @@ export default function Analytics() {
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 z-10 rounded-2xl">
                 <BarChart3 className="w-10 h-10 text-slate-300 mb-3" />
                 <p className="text-sm font-bold text-slate-900">No Revenue Data Available</p>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Create Closed Won deals to view projections</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Create Closed Success deals to view projections</p>
               </div>
             )}
             <ResponsiveContainer width="100%" height="100%">
@@ -227,8 +227,8 @@ export default function Analytics() {
         
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50/50">
+            <thead className="sticky top-0 z-20 bg-slate-50/90 backdrop-blur-md shadow-sm">
+              <tr>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest">Representative</th>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest">Registry Closures</th>
                 <th className="px-10 py-6 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Revenue Yield</th>

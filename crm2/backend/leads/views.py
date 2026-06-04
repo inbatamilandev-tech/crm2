@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from contacts.serializers import ContactSerializer
 from deals.serializers import DealSerializer
-from users.permissions import RoleBasedAccessPermission
+from users.permissions import HasModulePermission
 from workflows.services import convert_lead
 
 from .models import Lead
@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 class LeadViewSet(viewsets.ModelViewSet):
     serializer_class = LeadSerializer
-    permission_classes = [RoleBasedAccessPermission]
+    permission_classes = [HasModulePermission]
+    rbac_module = 'lead'
     pagination_class = None
     filterset_fields = ['status']
     search_fields = ['name', 'email', 'company']
@@ -61,18 +62,38 @@ class LeadViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return Lead.objects.none()
+        if not user.role:
+            return Lead.objects.none()
 
         base_qs = Lead.objects.select_related('assigned_to', 'contact', 'contact__account')
-        if user.role == 'admin':
+        scope = user.role.data_scope
+
+        if scope == 'global':
             return base_qs.all()
-        if user.role == 'manager':
+        if scope == 'team':
             return base_qs.filter(assigned_to__team=user.team) if user.team else base_qs.none()
-        if user.role == 'sales':
-            return base_qs.filter(assigned_to=user)
-        return base_qs.none()
+        # 'own' scope
+        return base_qs.filter(assigned_to=user)
 
     def perform_create(self, serializer):
-        serializer.save(assigned_to=self.request.user)
+        lead = serializer.save(assigned_to=self.request.user)
+        
+        try:
+            from users.models import Notification
+            from users.serializers import NotificationSerializer
+            from realtime.bus import emit_notification
+            
+            notification = Notification.objects.create(
+                user=self.request.user,
+                title="New Lead Created",
+                message=f"Lead {lead.company or lead.name or lead.email} was successfully added.",
+                type="success",
+                link="/leads"
+            )
+            notif_data = NotificationSerializer(notification).data
+            emit_notification(self.request.user.id, notif_data)
+        except Exception as e:
+            logger.error(f"Failed to emit notification for lead creation: {e}")
 
     def perform_destroy(self, instance):
         instance.soft_delete()
